@@ -248,9 +248,9 @@ class AthenaPKDataset(Dataset):
         if units_override is None:
             units_override = {}
         self._handle = HDF5FileHandler(filename)
-        xrat = self._handle["yt-Info"].attrs["RootGridDomain"][2]
-        yrat = self._handle["yt-Info"].attrs["RootGridDomain"][5]
-        zrat = self._handle["yt-Info"].attrs["RootGridDomain"][8]
+        xrat = self._handle["Info"].attrs["RootGridDomain"][2]
+        yrat = self._handle["Info"].attrs["RootGridDomain"][5]
+        zrat = self._handle["Info"].attrs["RootGridDomain"][8]
         if xrat != 1.0 or yrat != 1.0 or zrat != 1.0:
             self._index_class = AthenaPKLogarithmicIndex
             self.logarithmic = True
@@ -283,11 +283,16 @@ class AthenaPKDataset(Dataset):
             ("mass", "g"),
             ("temperature", "K"),
         ]:
+
+            attr_name = f"Code{unit.capitalize()}"
             # We set these to cgs for now, but they may have been overridden
             if getattr(self, unit + "_unit", None) is not None:
                 continue
-            mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
-            setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
+            elif attr_name in self._handle["Info"].attrs:
+                setattr(self, f"{unit}_unit", self.quan(self._handle["Info"].attrs[attr_name], cgs))
+            else:
+                mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
+                setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
 
         self.magnetic_unit = np.sqrt(
             4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit)
@@ -297,25 +302,25 @@ class AthenaPKDataset(Dataset):
 
     def _parse_parameter_file(self):
 
-        xmin, xmax = self._handle["yt-Info"].attrs["RootGridDomain"][0:2]
-        ymin, ymax = self._handle["yt-Info"].attrs["RootGridDomain"][3:5]
-        zmin, zmax = self._handle["yt-Info"].attrs["RootGridDomain"][6:8]
+        xmin, xmax = self._handle["Info"].attrs["RootGridDomain"][0:2]
+        ymin, ymax = self._handle["Info"].attrs["RootGridDomain"][3:5]
+        zmin, zmax = self._handle["Info"].attrs["RootGridDomain"][6:8]
 
         self.domain_left_edge = np.array([xmin, ymin, zmin], dtype="float64")
         self.domain_right_edge = np.array([xmax, ymax, zmax], dtype="float64")
 
         self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"].decode("utf-8")]
         self.domain_width = self.domain_right_edge - self.domain_left_edge
-        self.domain_dimensions = self._handle["yt-Info"].attrs["RootGridSize"]
+        self.domain_dimensions = self._handle["Info"].attrs["RootGridSize"]
 
         self._field_map = {}
         k = 0
         for dname, num_var in zip(
-            self._handle["yt-Info"].attrs["DatasetNames"], self._handle["yt-Info"].attrs["NumVariables"]
+            self._handle["Info"].attrs["DatasetNames"], self._handle["Info"].attrs["NumVariables"]
         ):
             for j in range(num_var):
-                fname = self._handle["yt-Info"].attrs["VariableNames"][j]
-                #fname = self._handle["yt-Info"].attrs["VariableNames"][k].decode("ascii", "ignore")
+                fname = self._handle["Info"].attrs["VariableNames"][j]
+                #fname = self._handle["Info"].attrs["VariableNames"][k].decode("ascii", "ignore")
                 self._field_map[fname] = (dname, j)
                 k += 1
 
@@ -332,11 +337,12 @@ class AthenaPKDataset(Dataset):
         self.num_ghost_zones = 0
         self.field_ordering = "fortran"
         self.boundary_conditions = [1] * 6
+
         if "periodicity" in self.specified_parameters:
             self._periodicity = tuple(
                 self.specified_parameters["periodicity"])
         else:
-            boundary_conditions = self._handle["yt-Info"].attrs["BoundaryConditions"]
+            boundary_conditions = self._handle["Info"].attrs["BoundaryConditions"]
 
             inner_bcs = boundary_conditions[::2]
             #outer_bcs = boundary_conditions[1::2]
@@ -349,8 +355,10 @@ class AthenaPKDataset(Dataset):
 
         if "gamma" in self.specified_parameters:
             self.gamma = float(self.specified_parameters["gamma"])
+        elif "AdiabaticIndex" in self._handle["Info"].attrs:
+            self.gamma = self._handle["Info"].attrs["AdiabaticIndex"]
         else:
-            self.gamma = self._handle["athenaPK-Info"].attrs["AdiabaticIndex"]
+            self.gamma = 5./3.
 
         self.current_redshift = (
             self.omega_lambda
@@ -361,11 +369,8 @@ class AthenaPKDataset(Dataset):
         self.parameters[
             "HydroMethod"
         ] = 0  # Hardcode for now until field staggering is supported.
-        if "gamma" in self.specified_parameters:
-            self.parameters["Gamma"] = self.specified_parameters["gamma"]
-        else:
-            #(forrestglines) - how is this different from gamma?
-            self.parameters["Gamma"] = self._handle["athenaPK-Info"].attrs["AdiabaticIndex"]
+        
+        self.parameters["Gamma"] = self.gamma
 
         self.mu = self.specified_parameters.get("mu", default_mu)
 
