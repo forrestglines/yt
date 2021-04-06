@@ -16,8 +16,7 @@ def velocity_field(j):
 
 class AthenaPKFieldInfo(FieldInfoContainer):
     known_other_fields = (
-        ("rho", (rho_units, ["density"], None)),
-        ("dens", (rho_units, ["density"], None)),
+        ("Density", (rho_units, ["density"], None)),
         ("Bcc1", (b_units, [], None)),
         ("Bcc2", (b_units, [], None)),
         ("Bcc3", (b_units, [], None)),
@@ -30,8 +29,8 @@ class AthenaPKFieldInfo(FieldInfoContainer):
         # Add velocity fields
         vel_prefix = "velocity"
         for i, comp in enumerate(self.ds.coordinates.axis_order):
-            vel_field = ("athena_pk", "vel%d" % (i + 1))
-            mom_field = ("athena_pk", "mom%d" % (i + 1))
+            vel_field = ("athena_pk", f"Velocity{i+1}")
+            mom_field = ("athena_pk", f"MomentumDensity{i+1}")
             if vel_field in self.field_list:
                 self.add_output_field(
                     vel_field, sampling_type="cell", units="code_length/code_time"
@@ -54,21 +53,21 @@ class AthenaPKFieldInfo(FieldInfoContainer):
                     units=unit_system["velocity"],
                 )
         # Figure out thermal energy field
-        if ("athena_pk", "press") in self.field_list:
+        if ("athena_pk", "Pressure") in self.field_list:
             self.add_output_field(
-                ("athena_pk", "press"), sampling_type="cell", units=pres_units
+                ("athena_pk", "Pressure"), sampling_type="cell", units=pres_units
             )
             self.alias(
                 ("gas", "pressure"),
-                ("athena_pk", "press"),
+                ("athena_pk", "Pressure"),
                 units=unit_system["pressure"],
             )
 
             def _specific_thermal_energy(field, data):
                 return (
-                    data["athena_pk", "press"]
+                    data["athena_pk", "Pressure"]
                     / (data.ds.gamma - 1.0)
-                    / data["athena_pk", "rho"]
+                    / data["athena_pk", "Density"]
                 )
 
             self.add_field(
@@ -83,10 +82,10 @@ class AthenaPKFieldInfo(FieldInfoContainer):
             )
 
             def _specific_thermal_energy(field, data):
-                eint = data["athena_pk", "Etot"] - data["gas", "kinetic_energy_density"]
+                eint = data["athena_pk", "TotalEnergyDensity"] - data["gas", "kinetic_energy_density"]
                 if ("athena_pk", "B1") in self.field_list:
                     eint -= data["gas", "magnetic_energy_density"]
-                return eint / data["athena_pk", "dens"]
+                return eint / data["athena_pk", "Density"]
 
             self.add_field(
                 ("gas", "specific_thermal_energy"),
