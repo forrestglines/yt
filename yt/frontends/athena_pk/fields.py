@@ -9,7 +9,7 @@ vel_units = "code_length / code_time"
 
 def velocity_field(j):
     def _velocity(field, data):
-        return data["athena_pk", f"mom{j}"] / data["athena_pk", "dens"]
+        return data["athena_pk", f"MomentumDensity{j}"] / data["athena_pk", "Density"]
 
     return _velocity
 
@@ -76,9 +76,9 @@ class AthenaPKFieldInfo(FieldInfoContainer):
                 function=_specific_thermal_energy,
                 units=unit_system["specific_energy"],
             )
-        elif ("athena_pk", "Etot") in self.field_list:
+        elif ("athena_pk", "TotalEnergyDensity") in self.field_list:
             self.add_output_field(
-                ("athena_pk", "Etot"), sampling_type="cell", units=pres_units
+                ("athena_pk", "TotalEnergyDensity"), sampling_type="cell", units=pres_units
             )
 
             def _specific_thermal_energy(field, data):

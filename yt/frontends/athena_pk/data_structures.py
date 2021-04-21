@@ -286,12 +286,12 @@ class AthenaPKDataset(Dataset):
 
             attr_name = f"Code{unit.capitalize()}"
             # We set these to cgs for now, but they may have been overridden
-            unit_attrs = {key:val for key, val in self._handle["Info"].attrs.items() if key.endswith(attr_name)} 
+            unit_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith(attr_name)} 
 
             if getattr(self, unit + "_unit", None) is not None:
                 continue
             elif len(unit_attrs) >= 1:
-                setattr(self, f"{unit}_unit", self.quan(unit_attrs.values()[0], cgs))
+                setattr(self, f"{unit}_unit", self.quan(list(unit_attrs.values())[0], cgs))
             else:
                 mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
                 setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
@@ -356,11 +356,11 @@ class AthenaPKDataset(Dataset):
             self._periodicity = tuple((bc == "periodic" for bc in inner_bcs))
 
 
-        gamma_attrs = {key:val for key, val in self._handle["Info"].attrs.items() if key.endswith("AdiabaticIndex")} 
+        gamma_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith("AdiabaticIndex")} 
         if "gamma" in self.specified_parameters:
             self.gamma = float(self.specified_parameters["gamma"])
         elif len(gamma_attrs) >= 1 :
-            self.gamma = gamma_attrs.values()[0]
+            self.gamma = list(gamma_attrs.values())[0]
         else:
             self.gamma = 5./3.
 
