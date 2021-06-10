@@ -9,7 +9,7 @@ vel_units = "code_length / code_time"
 
 def velocity_field(j):
     def _velocity(field, data):
-        return data["athena_pk", f"MomentumDensity{j}"] / data["athena_pk", "Density"]
+        return data["parthenon", f"MomentumDensity{j}"] / data["parthenon", "Density"]
 
     return _velocity
 
@@ -17,9 +17,9 @@ def velocity_field(j):
 class ParthenonFieldInfo(FieldInfoContainer):
     known_other_fields = (
         ("Density", (rho_units, ["density"], None)),
-        ("Bcc1", (b_units, [], None)),
-        ("Bcc2", (b_units, [], None)),
-        ("Bcc3", (b_units, [], None)),
+        ("MagneticField1", (b_units, [], None)),
+        ("MagneticField2", (b_units, [], None)),
+        ("MagneticField3", (b_units, [], None)),
     )
 
     def setup_fluid_fields(self):
@@ -29,8 +29,8 @@ class ParthenonFieldInfo(FieldInfoContainer):
         # Add velocity fields
         vel_prefix = "velocity"
         for i, comp in enumerate(self.ds.coordinates.axis_order):
-            vel_field = ("athena_pk", f"Velocity{i+1}")
-            mom_field = ("athena_pk", f"MomentumDensity{i+1}")
+            vel_field = ("parthenon", f"Velocity{i+1}")
+            mom_field = ("parthenon", f"MomentumDensity{i+1}")
             if vel_field in self.field_list:
                 self.add_output_field(
                     vel_field, sampling_type="cell", units="code_length/code_time"
@@ -53,21 +53,21 @@ class ParthenonFieldInfo(FieldInfoContainer):
                     units=unit_system["velocity"],
                 )
         # Figure out thermal energy field
-        if ("athena_pk", "Pressure") in self.field_list:
+        if ("parthenon", "Pressure") in self.field_list:
             self.add_output_field(
-                ("athena_pk", "Pressure"), sampling_type="cell", units=pres_units
+                ("parthenon", "Pressure"), sampling_type="cell", units=pres_units
             )
             self.alias(
                 ("gas", "pressure"),
-                ("athena_pk", "Pressure"),
+                ("parthenon", "Pressure"),
                 units=unit_system["pressure"],
             )
 
             def _specific_thermal_energy(field, data):
                 return (
-                    data["athena_pk", "Pressure"]
+                    data["parthenon", "Pressure"]
                     / (data.ds.gamma - 1.0)
-                    / data["athena_pk", "Density"]
+                    / data["parthenon", "Density"]
                 )
 
             self.add_field(
@@ -76,16 +76,16 @@ class ParthenonFieldInfo(FieldInfoContainer):
                 function=_specific_thermal_energy,
                 units=unit_system["specific_energy"],
             )
-        elif ("athena_pk", "TotalEnergyDensity") in self.field_list:
+        elif ("parthenon", "TotalEnergyDensity") in self.field_list:
             self.add_output_field(
-                ("athena_pk", "TotalEnergyDensity"), sampling_type="cell", units=pres_units
+                ("parthenon", "TotalEnergyDensity"), sampling_type="cell", units=pres_units
             )
 
             def _specific_thermal_energy(field, data):
-                eint = data["athena_pk", "TotalEnergyDensity"] - data["gas", "kinetic_energy_density"]
-                if ("athena_pk", "B1") in self.field_list:
+                eint = data["parthenon", "TotalEnergyDensity"] - data["gas", "kinetic_energy_density"]
+                if ("parthenon", "B1") in self.field_list:
                     eint -= data["gas", "magnetic_energy_density"]
-                return eint / data["athena_pk", "Density"]
+                return eint / data["parthenon", "Density"]
 
             self.add_field(
                 ("gas", "specific_thermal_energy"),
@@ -111,5 +111,5 @@ class ParthenonFieldInfo(FieldInfoContainer):
         )
 
         setup_magnetic_field_aliases(
-            self, "athena_pk", ["Bcc%d" % ax for ax in (1, 2, 3)]
+            self, "parthenon", ["MagneticField%d" % ax for ax in (1, 2, 3)]
         )
