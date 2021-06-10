@@ -202,7 +202,7 @@ _cubehelix_data = {
     * (1.97294 * np.cos(2 * np.pi * (_s_cubehelix / 3 + _r_cubehelix * x))),
 }
 
-add_colormap("cubehelix", _cubehelix_data)
+#add_colormap("cubehelix", _cubehelix_data)
 
 # The turbo colormap, by Anton Mikhailov.
 # from: https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
@@ -476,7 +476,7 @@ _turbo_data = {
     for i, color in enumerate(["red", "green", "blue"])
 }
 
-add_colormap("turbo", _turbo_data)
+#add_colormap("turbo", _turbo_data)
 
 _turbo_r_colormap_data = np.flip(_turbo_colormap_data, axis=0)
 _turbo_r_data = {
@@ -485,7 +485,7 @@ _turbo_r_data = {
     )
     for i, color in enumerate(["red", "green", "blue"])
 }
-add_colormap("turbo_r", _turbo_r_data)
+#add_colormap("turbo_r", _turbo_r_data)
 
 # Add colormaps from cmocean, if it's installed
 if cmocean is not None:

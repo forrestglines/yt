@@ -13,17 +13,10 @@ from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.utilities.chemical_formulas import default_mu
 from yt.utilities.file_handler import HDF5FileHandler
 
-from .fields import AthenaPKFieldInfo
+from .fields import ParthenonFieldInfo
 
 geom_map = {
     "UniformCartesian": "cartesian",
-#    "cylindrical": "cylindrical",
-#    "spherical_polar": "spherical",
-#    "minkowski": "cartesian",
-#    "tilted": "cartesian",
-#    "sinusoidal": "cartesian",
-#    "schwarzschild": "spherical",
-#    "kerr-schild": "spherical",
 }
 
 _cis = np.fromiter(
@@ -31,114 +24,7 @@ _cis = np.fromiter(
 )
 _cis.shape = (8, 3)
 
-
-#class AthenaPKLogarithmicMesh(SemiStructuredMesh):
-#    _index_offset = 0
-#
-#    def __init__(
-#        self,
-#        mesh_id,
-#        filename,
-#        connectivity_indices,
-#        connectivity_coords,
-#        index,
-#        blocks,
-#        dims,
-#    ):
-#        super().__init__(
-#            mesh_id, filename, connectivity_indices, connectivity_coords, index
-#        )
-#        self.mesh_blocks = blocks
-#        self.mesh_dims = dims
-#
-#
-#class AthenaPKLogarithmicIndex(UnstructuredIndex):
-#    def __init__(self, ds, dataset_type="athena_pk"):
-#        self._handle = ds._handle
-#        super().__init__(ds, dataset_type)
-#        self.index_filename = self.dataset.filename
-#        self.directory = os.path.dirname(self.dataset.filename)
-#        self.dataset_type = dataset_type
-#
-#    def _initialize_mesh(self):
-#        mylog.debug("Setting up meshes.")
-#        num_blocks = self._handle.attrs["NumMeshBlocks"]
-#        log_loc = self._handle["LogicalLocations"]
-#        levels = self._handle["Levels"]
-#        x1f = self._handle["x1f"]
-#        x2f = self._handle["x2f"]
-#        x3f = self._handle["x3f"]
-#        nbx, nby, nbz = tuple(np.max(log_loc, axis=0) + 1)
-#        nlevel = self._handle.attrs["MaxLevel"] + 1
-#
-#        nb = np.array([nbx, nby, nbz], dtype="int64")
-#        self.mesh_factors = np.ones(3, dtype="int64") * ((nb > 1).astype("int") + 1)
-#
-#        block_grid = -np.ones((nbx, nby, nbz, nlevel), dtype=np.int)
-#        block_grid[log_loc[:, 0], log_loc[:, 1], log_loc[:, 2], levels[:]] = np.arange(
-#            num_blocks
-#        )
-#
-#        block_list = np.arange(num_blocks, dtype="int64")
-#        bc = []
-#        for i in range(num_blocks):
-#            if block_list[i] >= 0:
-#                ii, jj, kk = log_loc[i]
-#                neigh = block_grid[ii : ii + 2, jj : jj + 2, kk : kk + 2, levels[i]]
-#                if np.all(neigh > -1):
-#                    loc_ids = neigh.transpose().flatten()
-#                    bc.append(loc_ids)
-#                    block_list[loc_ids] = -1
-#                else:
-#                    bc.append(np.array(i))
-#                    block_list[i] = -1
-#
-#        num_meshes = len(bc)
-#
-#        self.meshes = []
-#        pbar = get_pbar("Constructing meshes", num_meshes)
-#        for i in range(num_meshes):
-#            ob = bc[i][0]
-#            x = x1f[ob, :]
-#            y = x2f[ob, :]
-#            z = x3f[ob, :]
-#            if nbx > 1:
-#                x = np.concatenate([x, x1f[bc[i][1], 1:]])
-#            if nby > 1:
-#                y = np.concatenate([y, x2f[bc[i][2], 1:]])
-#            if nbz > 1:
-#                z = np.concatenate([z, x3f[bc[i][4], 1:]])
-#            nxm = x.size
-#            nym = y.size
-#            nzm = z.size
-#            coords = np.zeros((nxm, nym, nzm, 3), dtype="float64", order="C")
-#            coords[:, :, :, 0] = x[:, None, None]
-#            coords[:, :, :, 1] = y[None, :, None]
-#            coords[:, :, :, 2] = z[None, None, :]
-#            coords.shape = (nxm * nym * nzm, 3)
-#            cycle = np.rollaxis(np.indices((nxm - 1, nym - 1, nzm - 1)), 0, 4)
-#            cycle.shape = ((nxm - 1) * (nym - 1) * (nzm - 1), 3)
-#            off = _cis + cycle[:, np.newaxis]
-#            connectivity = ((off[:, :, 0] * nym) + off[:, :, 1]) * nzm + off[:, :, 2]
-#            mesh = AthenaPKLogarithmicMesh(
-#                i,
-#                self.index_filename,
-#                connectivity,
-#                coords,
-#                self,
-#                bc[i],
-#                np.array([nxm - 1, nym - 1, nzm - 1]),
-#            )
-#            self.meshes.append(mesh)
-#            pbar.update(i)
-#        pbar.finish()
-#        mylog.debug("Done setting up meshes.")
-#
-#    def _detect_output_fields(self):
-#        self.field_list = [("athena_pk", k) for k in self.ds._field_map]
-
-
-class AthenaPKGrid(AMRGridPatch):
+class ParthenonGrid(AMRGridPatch):
     _id_offset = 0
 
     def __init__(self, id, index, level):
@@ -160,16 +46,16 @@ class AthenaPKGrid(AMRGridPatch):
         self.field_data["dx"], self.field_data["dy"], self.field_data["dz"] = self.dds
 
     def __repr__(self):
-        return "AthenaPKGrid_%04i (%s)" % (self.id, self.ActiveDimensions)
+        return "ParthenonGrid_%04i (%s)" % (self.id, self.ActiveDimensions)
 
 
-class AthenaPKHierarchy(GridIndex):
+class ParthenonHierarchy(GridIndex):
 
-    grid = AthenaPKGrid
-    _dataset_type = "athena_pk"
+    grid = ParthenonGrid
+    _dataset_type = "parthenon"
     _data_file = None
 
-    def __init__(self, ds, dataset_type="athena_pk"):
+    def __init__(self, ds, dataset_type="parthenon"):
         self.dataset = weakref.proxy(ds)
         self.directory = os.path.dirname(self.dataset.filename)
         self.dataset_type = dataset_type
@@ -179,7 +65,7 @@ class AthenaPKHierarchy(GridIndex):
         GridIndex.__init__(self, ds, dataset_type)
 
     def _detect_output_fields(self):
-        self.field_list = [("athena_pk", k) for k in self.dataset._field_map]
+        self.field_list = [("parthenon", k) for k in self.dataset._field_map]
 
     def _count_grids(self):
         self.num_grids = self._handle["Info"].attrs["NumMeshBlocks"]
@@ -228,20 +114,20 @@ class AthenaPKHierarchy(GridIndex):
         self.max_level = self._handle["Info"].attrs["MaxLevel"]
 
 
-class AthenaPKDataset(Dataset):
-    _field_info_class = AthenaPKFieldInfo
-    _dataset_type = "athena_pk"
+class ParthenonDataset(Dataset):
+    _field_info_class = ParthenonFieldInfo
+    _dataset_type = "parthenon"
 
     def __init__(
         self,
         filename,
-        dataset_type="athena_pk",
+        dataset_type="parthenon",
         storage_filename=None,
         parameters=None,
         units_override=None,
         unit_system="code",
     ):
-        self.fluid_types += ("athena_pk",)
+        self.fluid_types += ("parthenon",)
         if parameters is None:
             parameters = {}
         self.specified_parameters = parameters
@@ -252,10 +138,10 @@ class AthenaPKDataset(Dataset):
         yrat = self._handle["Info"].attrs["RootGridDomain"][5]
         zrat = self._handle["Info"].attrs["RootGridDomain"][8]
         if xrat != 1.0 or yrat != 1.0 or zrat != 1.0:
-            self._index_class = AthenaPKLogarithmicIndex
+            self._index_class = ParthenonLogarithmicIndex
             self.logarithmic = True
         else:
-            self._index_class = AthenaPKHierarchy
+            self._index_class = ParthenonHierarchy
             self.logarithmic = False
         Dataset.__init__(
             self,
@@ -284,7 +170,7 @@ class AthenaPKDataset(Dataset):
             ("temperature", "K"),
         ]:
 
-            attr_name = f"Code{unit.capitalize()}"
+            attr_name = f"code_{unit}_cgs"
             # We set these to cgs for now, but they may have been overridden
             unit_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith(attr_name)} 
 
