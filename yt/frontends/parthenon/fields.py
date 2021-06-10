@@ -14,7 +14,7 @@ def velocity_field(j):
     return _velocity
 
 
-class AthenaPKFieldInfo(FieldInfoContainer):
+class ParthenonFieldInfo(FieldInfoContainer):
     known_other_fields = (
         ("Density", (rho_units, ["density"], None)),
         ("Bcc1", (b_units, [], None)),

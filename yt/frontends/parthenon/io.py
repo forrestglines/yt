@@ -19,9 +19,9 @@ jj = [0, 0, 1, 1, 0, 0, 1, 1]
 kk = [0, 0, 0, 0, 1, 1, 1, 1]
 
 
-class IOHandlerAthenaPK(BaseIOHandler):
+class IOHandlerParthenon(BaseIOHandler):
     _particle_reader = False
-    _dataset_type = "athena_pk"
+    _dataset_type = "parthenon"
 
     def __init__(self, ds):
         super().__init__(ds)
@@ -34,7 +34,7 @@ class IOHandlerAthenaPK(BaseIOHandler):
 
     def _read_fluid_selection(self, chunks, selector, fields, size):
         chunks = list(chunks)
-        if any((ftype != "athena_pk" for ftype, fname in fields)):
+        if any((ftype != "parthenon" for ftype, fname in fields)):
             raise NotImplementedError
         f = self._handle
         rv = {}

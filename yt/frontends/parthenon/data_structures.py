@@ -197,17 +197,18 @@ class ParthenonDataset(Dataset):
         self.domain_left_edge = np.array([xmin, ymin, zmin], dtype="float64")
         self.domain_right_edge = np.array([xmax, ymax, zmax], dtype="float64")
 
-        self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"].decode("utf-8")]
+        self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"]]
+        #self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"].decode("utf-8")]
         self.domain_width = self.domain_right_edge - self.domain_left_edge
         self.domain_dimensions = self._handle["Info"].attrs["RootGridSize"]
 
         self._field_map = {}
         k = 0
         for dname, num_var in zip(
-            self._handle["Info"].attrs["DatasetNames"], self._handle["Info"].attrs["NumVariables"]
+            (self._handle["Info"].attrs["OutputDatasetNames"],), (self._handle["Info"].attrs["NumComponents"],)
         ):
             for j in range(num_var):
-                fname = self._handle["Info"].attrs["VariableNames"][j]
+                fname = self._handle["Info"].attrs["ComponentNames"][j]
                 #fname = self._handle["Info"].attrs["VariableNames"][k].decode("ascii", "ignore")
                 self._field_map[fname] = (dname, j)
                 k += 1
