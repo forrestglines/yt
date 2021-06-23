@@ -7,7 +7,7 @@ import numpy as np
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.data_objects.index_subobjects.unstructured_mesh import SemiStructuredMesh
 from yt.data_objects.static_output import Dataset
-from yt.funcs import get_pbar, mylog
+from yt.funcs import get_pbar, mylog, setdefaultattr
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.utilities.chemical_formulas import default_mu
@@ -182,10 +182,14 @@ class ParthenonDataset(Dataset):
                 mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
                 setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
 
-        self.magnetic_unit = np.sqrt(
-            4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit)
-        )
-        self.magnetic_unit.convert_to_units("gauss")
+        #self.magnetic_unit = np.sqrt(
+        #    4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit)
+        #)
+        #self.magnetic_unit.convert_to_units("gauss")
+        magnetic_unit = np.sqrt(
+            4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit))
+        magnetic_unit = np.float64(magnetic_unit.in_cgs())
+        setdefaultattr(self, "magnetic_unit", self.quan(magnetic_unit, "gauss"))
         self.velocity_unit = self.length_unit / self.time_unit
 
     def _parse_parameter_file(self):
@@ -204,14 +208,27 @@ class ParthenonDataset(Dataset):
 
         self._field_map = {}
         k = 0
-        for dname, num_var in zip(
-            (self._handle["Info"].attrs["OutputDatasetNames"],), (self._handle["Info"].attrs["NumComponents"],)
-        ):
-            for j in range(num_var):
-                fname = self._handle["Info"].attrs["ComponentNames"][j]
+
+        dnames = self._handle["Info"].attrs["OutputDatasetNames"]
+        num_components = self._handle["Info"].attrs["NumComponents"]
+
+        #Use duck typing to check if num_components is a single int or a list
+        #h5py will return different types if there is a single variable or if there are more
+        try:
+            iter(num_components)
+        except:
+            dnames = (dnames,)
+            num_components = (num_components,)
+
+        component_name_offset = 0
+        for dname, num_component in zip( dnames, num_components):
+            for j in range(num_component):
+                fname = self._handle["Info"].attrs["ComponentNames"][j + component_name_offset]
                 #fname = self._handle["Info"].attrs["VariableNames"][k].decode("ascii", "ignore")
                 self._field_map[fname] = (dname, j)
                 k += 1
+            component_name_offset  = int(component_name_offset + num_component)
+
 
         self.refine_by = 2
         dimensionality = 3
