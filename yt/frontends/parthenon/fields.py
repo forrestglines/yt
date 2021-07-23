@@ -5,6 +5,8 @@ b_units = "code_magnetic"
 pres_units = "code_mass/(code_length*code_time**2)"
 rho_units = "code_mass / code_length**3"
 vel_units = "code_length / code_time"
+mom_units = "code_mass / code_length**2 / code_time"
+eng_units = "code_mass / code_length / code_time**2"
 
 
 def velocity_field(j):
@@ -17,6 +19,10 @@ def velocity_field(j):
 class ParthenonFieldInfo(FieldInfoContainer):
     known_other_fields = (
         ("Density", (rho_units, ["density"], None)),
+        ("MomentumDensity1",(mom_units, ["MomentumDensity1"], None)),
+        ("MomentumDensity2",(mom_units, ["MomentumDensity2"], None)),
+        ("MomentumDensity3",(mom_units, ["MomentumDensity3"], None)),
+        ("TotalEnergyDensity",(eng_units, ["TotalEnergyDensity"], None)),
         ("MagneticField1", (b_units, [], None)),
         ("MagneticField2", (b_units, [], None)),
         ("MagneticField3", (b_units, [], None)),
