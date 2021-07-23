@@ -1,8 +1,8 @@
-from distutils.version import LooseVersion
 from io import BytesIO
 
 import matplotlib
 import numpy as np
+from packaging.version import parse as parse_version
 
 from yt.funcs import (
     get_brewer_cmap,
@@ -132,9 +132,9 @@ class PlotMPL:
 
         if mpl_kwargs is None:
             mpl_kwargs = {}
-        if "papertype" not in mpl_kwargs and LooseVersion(
+        if "papertype" not in mpl_kwargs and parse_version(
             matplotlib.__version__
-        ) < LooseVersion("3.3.0"):
+        ) < parse_version("3.3.0"):
             mpl_kwargs["papertype"] = "auto"
 
         name = validate_image_name(name)
@@ -211,18 +211,15 @@ class ImagePlotMPL(PlotMPL):
         elif cbnorm == "linear":
             cbnorm_cls = matplotlib.colors.Normalize
         elif cbnorm == "symlog":
+            # if cblinthresh is not specified, try to come up with a reasonable default
+            vmin = float(np.nanmin(data))
+            vmax = float(np.nanmax(data))
             if cblinthresh is None:
-                cblinthresh = float((np.nanmax(data) - np.nanmin(data)) / 10.0)
+                cblinthresh = np.nanmin(np.absolute(data)[data != 0])
 
-            cbnorm_kwargs.update(
-                dict(
-                    linthresh=cblinthresh,
-                    vmin=float(np.nanmin(data)),
-                    vmax=float(np.nanmax(data)),
-                )
-            )
-            MPL_VERSION = LooseVersion(matplotlib.__version__)
-            if MPL_VERSION >= "3.2.0":
+            cbnorm_kwargs.update(dict(linthresh=cblinthresh, vmin=vmin, vmax=vmax))
+            MPL_VERSION = parse_version(matplotlib.__version__)
+            if MPL_VERSION >= parse_version("3.2.0"):
                 # note that this creates an inconsistency between mpl versions
                 # since the default value previous to mpl 3.4.0 is np.e
                 # but it is only exposed since 3.2.0
@@ -241,7 +238,7 @@ class ImagePlotMPL(PlotMPL):
 
         if self._transform is None:
             # sets the transform to be an ax.TransData object, where the
-            # coordiante system of the data is controlled by the xlim and ylim
+            # coordinate system of the data is controlled by the xlim and ylim
             # of the data.
             transform = self.axes.transData
         else:
@@ -276,11 +273,7 @@ class ImagePlotMPL(PlotMPL):
             transform=transform,
         )
         if cbnorm == "symlog":
-            if LooseVersion(matplotlib.__version__) < LooseVersion("2.0.0"):
-                formatter_kwargs = {}
-            else:
-                formatter_kwargs = dict(linthresh=cblinthresh)
-            formatter = matplotlib.ticker.LogFormatterMathtext(**formatter_kwargs)
+            formatter = matplotlib.ticker.LogFormatterMathtext(linthresh=cblinthresh)
             self.cb = self.figure.colorbar(self.image, self.cax, format=formatter)
             if np.nanmin(data) >= 0.0:
                 yticks = [np.nanmin(data).v] + list(
@@ -414,10 +407,6 @@ class ImagePlotMPL(PlotMPL):
             draw_frame = choice
         self._draw_axes = choice
         self._draw_frame = draw_frame
-        if LooseVersion(matplotlib.__version__) < LooseVersion("2.0.0"):
-            fc = self.axes.get_axis_bgcolor()
-        else:
-            fc = self.axes.get_facecolor()
         self.axes.set_frame_on(draw_frame)
         self.axes.get_xaxis().set_visible(choice)
         self.axes.get_yaxis().set_visible(choice)
@@ -425,10 +414,6 @@ class ImagePlotMPL(PlotMPL):
         self.axes.set_position(axrect)
         self.cax.set_position(caxrect)
         self.figure.set_size_inches(*size)
-        if LooseVersion(matplotlib.__version__) < LooseVersion("2.0.0"):
-            self.axes.set_axis_bgcolor(fc)
-        else:
-            self.axes.set_facecolor(fc)
 
     def _toggle_colorbar(self, choice):
         """

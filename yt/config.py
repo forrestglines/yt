@@ -5,7 +5,7 @@ import toml
 from more_itertools import always_iterable
 
 from yt._maintenance.deprecation import issue_deprecation_warning
-from yt.utilities.configuration_tree import ConfigNode
+from yt.utilities.configuration_tree import ConfigLeaf, ConfigNode
 
 ytcfg_defaults = {}
 
@@ -31,9 +31,6 @@ ytcfg_defaults["yt"] = dict(
     test_storage_dir="/does/not/exist",
     test_data_dir="/does/not/exist",
     enzo_db="",
-    hub_url="https://girder.hub.yt/api/v1",
-    hub_api_key="",
-    hub_sandbox="/collection/yt_sandbox/data",
     notebook_password="",
     answer_testing_tolerance=3,
     answer_testing_bitwise=False,
@@ -42,7 +39,7 @@ ytcfg_defaults["yt"] = dict(
     answer_tests_url="http://answers.yt-project.org/{1}_{2}",
     sketchfab_api_key="None",
     imagebin_api_key="e1977d9195fe39e",
-    imagebin_upload_url="https://api.imgur.com/3/upload",
+    imagebin_upload_url="https://api.imgur.com/3/image",
     imagebin_delete_url="https://api.imgur.com/3/image/{delete_hash}",
     curldrop_upload_url="http://use.yt/upload",
     thread_field_detection=False,
@@ -99,13 +96,13 @@ class YTConfig:
             defaults = {}
         self.config_root = ConfigNode(None)
 
-    def get(self, section, *keys, callback=None, **kwargs):
-        if callback is None:
-
-            def callback(leaf):
-                return leaf.value
-
-        return self.config_root.get_leaf(section, *keys, callback=callback)
+    def get(self, section, *keys, callback=None):
+        node_or_leaf = self.config_root.get(section, *keys)
+        if isinstance(node_or_leaf, ConfigLeaf):
+            if callback is not None:
+                return callback(node_or_leaf)
+            return node_or_leaf.value
+        return node_or_leaf
 
     def get_most_specific(self, section, *keys, **kwargs):
         use_fallback = "fallback" in kwargs
@@ -148,14 +145,6 @@ class YTConfig:
             [section] + list(keys), value, extra_data=metadata
         )
 
-    def __setitem__(self, args, value):
-        section, *keys = args
-        self.set(section, *keys, value, metadata=None)
-
-    def __getitem__(self, key):
-        section, *keys = key
-        return self.get(section, *keys)
-
     def remove(self, *args):
         self.config_root.pop_leaf(args)
 
@@ -189,6 +178,22 @@ class YTConfig:
     @staticmethod
     def get_local_config_file():
         return os.path.join(os.path.abspath(os.curdir), "yt.toml")
+
+    def __setitem__(self, args, value):
+        section, *keys = always_iterable(args)
+        self.set(section, *keys, value, metadata=None)
+
+    def __getitem__(self, key):
+        section, *keys = always_iterable(key)
+        return self.get(section, *keys)
+
+    def __contains__(self, item):
+        return item in self.config_root
+
+    # Add support for IPython rich display
+    # see https://ipython.readthedocs.io/en/stable/config/integrating.html
+    def _repr_json_(self):
+        return self.config_root._repr_json_()
 
 
 _global_config_file = YTConfig.get_global_config_file()

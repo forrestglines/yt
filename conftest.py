@@ -1,7 +1,7 @@
 import os
 import shutil
 import tempfile
-import typing
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -70,8 +70,93 @@ def pytest_configure(config):
     # Register custom marks for answer tests and big data
     config.addinivalue_line("markers", "answer_test: Run the answer tests.")
     config.addinivalue_line(
-        "markers", "big_data: Run answer tests that require" " large data files."
+        "markers", "big_data: Run answer tests that require large data files."
     )
+    for value in (
+        # treat most warnings as errors
+        "error",
+        # >>> internal deprecation warnings with no obvious solution
+        # see https://github.com/yt-project/yt/issues/3381
+        (
+            r"ignore:The requested field name 'pd?[xyz]' is ambiguous and corresponds "
+            "to any one of the following field types.*:yt._maintenance.deprecation.VisibleDeprecationWarning"
+        ),
+        # >>> warnings emitted by testing frameworks, or in testing contexts
+        # we still have some yield-based tests, awaiting for transition into pytest
+        "ignore::pytest.PytestCollectionWarning",
+        # imp is used in nosetest
+        "ignore:the imp module is deprecated in favour of importlib; see the module's documentation for alternative uses:DeprecationWarning",
+        # the deprecation warning message for imp changed in Python 3.10, so we ignore both versions
+        "ignore:the imp module is deprecated in favour of importlib and slated for removal in Python 3.12; see the module's documentation for alternative uses:DeprecationWarning",
+        # matplotlib warnings related to the Agg backend which is used in CI, not much we can do about it
+        "ignore:Matplotlib is currently using agg, which is a non-GUI backend, so cannot show the figure.:UserWarning",
+        "ignore:tight_layout . falling back to Agg renderer:UserWarning",
+        #
+        # >>> warnings from wrong values passed to numpy
+        # these should normally be curated out of the test suite but they are too numerous
+        # to deal with in a reasonable time at the moment.
+        "ignore:invalid value encountered in log10:RuntimeWarning",
+        "ignore:divide by zero encountered in log10:RuntimeWarning",
+        "ignore:invalid value encountered in true_divide:RuntimeWarning",
+        #
+        # >>> there are many places in yt (most notably at the frontend level)
+        # where we open files but never explicitly close them
+        # Although this is in general bad practice, it can be intentional and
+        # justified in contexts where reading speeds should be optimized.
+        # It is not clear at the time of writing how to approach this,
+        # so I'm going to ignore this class of warnings altogether for now.
+        "ignore:unclosed file.*:ResourceWarning",
+    ):
+        config.addinivalue_line("filterwarnings", value)
+
+    # at the time of writing, astropy's wheels are behind numpy's latest
+    # version but this doesn't cause actual problems in our test suite, so
+    # we allow this warning to pass.
+    # last checked with astropy 4.2.1
+    config.addinivalue_line(
+        "filterwarnings",
+        (
+            "ignore:numpy.ndarray size changed, may indicate binary incompatibility. "
+            "Expected 80 from C header, got 88 from PyObject:RuntimeWarning"
+        ),
+    )
+    if find_spec("astropy") is not None:
+        # astropy triggers this warning from itself, there's not much we can do on our side
+        # last checked with astropy 4.2.1
+        config.addinivalue_line(
+            "filterwarnings", "ignore::astropy.wcs.wcs.FITSFixedWarning"
+        )
+
+    if find_spec("cartopy") is not None:
+        # cartopy still triggers this numpy warning
+        # last checked with cartopy 0.19.0
+        config.addinivalue_line(
+            "filterwarnings",
+            (
+                "ignore:`np.float` is a deprecated alias for the builtin `float`. "
+                "To silence this warning, use `float` by itself. "
+                "Doing this will not modify any behavior and is safe. "
+                "If you specifically wanted the numpy scalar type, use `np.float64` here."
+                ":DeprecationWarning: "
+            ),
+        )
+        # this warning *still* shows up on cartopy 0.19 so we'll ignore it
+        config.addinivalue_line(
+            "filterwarnings",
+            (
+                r"ignore:The default value for the \*approx\* keyword argument to "
+                r"\w+ will change from True to False after 0\.18\.:UserWarning"
+            ),
+        )
+        # this one could be resolved by upgrading PROJ on Jenkins,
+        # but there's isn't much else that can be done about it.
+        config.addinivalue_line(
+            "filterwarnings",
+            (
+                "ignore:The Stereographic projection in Proj older than 5.0.0 incorrectly "
+                "transforms points when central_latitude=0. Use this projection with caution.:UserWarning"
+            ),
+        )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -199,14 +284,10 @@ def hashing(request):
             with open(request.cls.answer_file) as fd:
                 request.cls.saved_hashes = yaml.safe_load(fd)
         except FileNotFoundError:
-            # On travis and appveyor only a minimal set of answer tests are
-            # run, which means that, for most answer tests, there won't be
-            # an existing answer file when comparing. There is currently no
-            # list of the minimal answer tests, so they can't be marked.
-            # As such, if we're comparing and the file of saved hashes isn't
-            # found, we just skip the test. We do the skip before the test
-            # is run to save time
-            pytest.skip("Answer file not found.")
+            module_filename = f"{request.function.__module__.replace('.', os.sep)}.py"
+            with open(f"generate_test_{os.getpid()}.txt", "a") as fp:
+                fp.write(f"{module_filename}::{request.cls.__name__}\n")
+            pytest.fail(msg="Answer file not found.", pytrace=False)
     request.cls.hashes = {}
     # Load the saved answers if we're comparing. We don't do this for the raw
     # answers because those are huge
@@ -226,7 +307,9 @@ def hashing(request):
     # Compare hashes
     elif not no_hash and not store_hash:
         try:
-            assert hashes == request.cls.saved_hashes
+            for test_name, test_hash in hashes.items():
+                assert test_name in request.cls.saved_hashes
+                assert test_hash == request.cls.saved_hashes[test_name]
         except AssertionError:
             pytest.fail(f"Comparison failure: {request.node.name}", pytrace=False)
     # Save raw data
@@ -265,11 +348,11 @@ def ds(request):
     # data_dir_load can take the cls, args, and kwargs. These optional
     # arguments, if present,  are given in a dictionary as the second
     # element of the list
-    if isinstance(request.param, typing.Sequence):
-        ds_fn, opts = request.param
-    else:
+    if isinstance(request.param, str):
         ds_fn = request.param
         opts = {}
+    else:
+        ds_fn, opts = request.param
     try:
         return data_dir_load(
             ds_fn, cls=opts.get("cls"), args=opts.get("args"), kwargs=opts.get("kwargs")
