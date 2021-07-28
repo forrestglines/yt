@@ -10,7 +10,7 @@ from yt.data_objects.static_output import Dataset
 from yt.funcs import get_pbar, mylog, setdefaultattr
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
-from yt.utilities.chemical_formulas import default_mu
+from yt.utilities.chemical_formulas import compute_mu
 from yt.utilities.file_handler import HDF5FileHandler
 
 from .fields import ParthenonFieldInfo
@@ -156,6 +156,9 @@ class ParthenonDataset(Dataset):
         self.storage_filename = storage_filename
         self.backup_filename = self.filename[:-4] + "_backup.gdf"
 
+        #Read Parthenon Params into Params object
+        self.Params = dict(self._handle["Params"].attrs)
+
     def _set_code_unit_attributes(self):
         """
         Generates the conversion to various physical _units based on the
@@ -280,7 +283,9 @@ class ParthenonDataset(Dataset):
         
         self.parameters["Gamma"] = self.gamma
 
-        self.mu = self.specified_parameters.get("mu", default_mu)
+        self.mu = self.specified_parameters.get(
+            "mu", compute_mu(self.default_species_fields)
+        )
 
     @classmethod
     def _is_valid(cls, filename, *args, **kwargs):
