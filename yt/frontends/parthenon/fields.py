@@ -1,7 +1,7 @@
 from yt.fields.field_info_container import FieldInfoContainer
 from yt.utilities.physical_constants import kboltz, mh
 
-b_units = "code_magnetic"
+mag_units = "sqrt(code_mass)/(sqrt(code_length)*code_time)"
 pres_units = "code_mass/(code_length*code_time**2)"
 rho_units = "code_mass / code_length**3"
 vel_units = "code_length / code_time"
@@ -23,9 +23,9 @@ class ParthenonFieldInfo(FieldInfoContainer):
         ("MomentumDensity2",(mom_units, ["MomentumDensity2"], None)),
         ("MomentumDensity3",(mom_units, ["MomentumDensity3"], None)),
         ("TotalEnergyDensity",(eng_units, ["TotalEnergyDensity"], None)),
-        ("MagneticField1", (b_units, [], None)),
-        ("MagneticField2", (b_units, [], None)),
-        ("MagneticField3", (b_units, [], None)),
+        ("MagneticField1", (mag_units, [], None)),
+        ("MagneticField2", (mag_units, [], None)),
+        ("MagneticField3", (mag_units, [], None)),
     )
 
     def setup_fluid_fields(self):
