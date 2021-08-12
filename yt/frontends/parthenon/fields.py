@@ -1,7 +1,8 @@
 from yt.fields.field_info_container import FieldInfoContainer
 from yt.utilities.physical_constants import kboltz, mh
 
-mag_units = "sqrt(code_mass)/(sqrt(code_length)*code_time)"
+
+mag_units = "code_magnetic"
 pres_units = "code_mass/(code_length*code_time**2)"
 rho_units = "code_mass / code_length**3"
 vel_units = "code_length / code_time"
