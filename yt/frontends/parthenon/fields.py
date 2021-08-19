@@ -90,7 +90,7 @@ class ParthenonFieldInfo(FieldInfoContainer):
 
             def _specific_thermal_energy(field, data):
                 eint = data["parthenon", "TotalEnergyDensity"] - data["gas", "kinetic_energy_density"]
-                if ("parthenon", "B1") in self.field_list:
+                if ("parthenon", "MagneticField1") in self.field_list:
                     eint -= data["gas", "magnetic_energy_density"]
                 return eint / data["parthenon", "Density"]
 
