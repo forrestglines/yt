@@ -1,6 +1,7 @@
 import os
 import weakref
 from itertools import chain, product
+import warnings
 
 import numpy as np
 
@@ -44,6 +45,18 @@ class ParthenonGrid(AMRGridPatch):
         if self.ds.dimensionality < 3:
             self.dds[2] = 1.0
         self.field_data["dx"], self.field_data["dy"], self.field_data["dz"] = self.dds
+
+    def retrieve_ghost_zones(self, n_zones, fields, all_levels=False, smoothed=False):
+        if smoothed:
+            warnings.warn(
+                "ghost-zones interpolation/smoothing is not "
+                "currently supported for Parthenon data.",
+                category=RuntimeWarning,
+            )
+            smoothed = False
+        return super(ParthenonGrid, self).retrieve_ghost_zones(
+            n_zones, fields, all_levels=all_levels, smoothed=smoothed
+        )
 
     def __repr__(self):
         return "ParthenonGrid_%04i (%s)" % (self.id, self.ActiveDimensions)
