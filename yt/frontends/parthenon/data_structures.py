@@ -138,7 +138,7 @@ class ParthenonDataset(Dataset):
         storage_filename=None,
         parameters=None,
         units_override=None,
-        unit_system="code",
+        unit_system="cgs",
     ):
         self.fluid_types += ("parthenon",)
         if parameters is None:
