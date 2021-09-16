@@ -177,8 +177,8 @@ class ParthenonDataset(Dataset):
         Generates the conversion to various physical _units based on the
         parameter file
         """
-        if "length_unit" not in self.units_override:
-            self.no_cgs_equiv_length = True
+        #if "length_unit" not in self.units_override:
+        #    self.no_cgs_equiv_length = True
         for unit, cgs in [
             ("length", "cm"),
             ("time", "s"),
