@@ -9,8 +9,6 @@ rho_units = "code_mass / code_length**3"
 vel_units = "code_length / code_time"
 mom_units = "code_mass / code_length**2 / code_time"
 eng_units = "code_mass / code_length / code_time**2"
-cr_units = "code_mass / code_length / code_time**3"
-time_units = "code_time"
 
 
 def velocity_field(j):
@@ -21,11 +19,11 @@ def velocity_field(j):
 
 def _cooling_time_field(field, data):
 
-    cooling_time = data['Density'] * data[('parthenon','cell_volume')] * data['specific_thermal_energy'] / data['cooling_rate']
+    cooling_time = data['Density'] * data['specific_thermal_energy'] / data['cooling_rate']
 
     #Set cooling time where Cooling_Rate==0 to infinity
     inf_ct_mask = data['cooling_rate'] == 0
-    cooling_time[ inf_ct_mask ] = yt.yt_quantity(np.inf,"s")
+    cooling_time[ inf_ct_mask ] = data.ds.quan(np.inf,"s")
 
     return cooling_time
 
@@ -143,9 +141,9 @@ class ParthenonFieldInfo(FieldInfoContainer):
 
             lambdas_units = self.ds.quan(self.ds.specified_parameters["cooling_table_lambda_units_cgs"],"erg*cm**3/s")
 
-            def _cooling_rate_field(field, data,
-                    log_temps=log_temps,log_lambdas=log_lambdas,lambdas_units=lambdas_units):
-                log_temp = np.log10(data["gas","temperature"]).in_units("K").v
+            def _cooling_rate_field(field, data):
+                nonlocal log_temps, log_lambdas, lambdas_units
+                log_temp = np.log10(data["gas","temperature"].in_units("K").v)
                 log_lambda = np.interp(log_temp,log_temps,log_lambdas)
 
                 #Zero cooling below the table
@@ -156,7 +154,7 @@ class ParthenonFieldInfo(FieldInfoContainer):
 
                 lambda_ = 10**(log_lambda)*lambdas_units
 
-                H_mass_fraction = data.parameters["H_mass_fraction"]
+                H_mass_fraction = data.ds.parameters["H_mass_fraction"]
 
                 cr = lambda_*(data["gas","density"]*H_mass_fraction/amu)**2
 
@@ -166,7 +164,7 @@ class ParthenonFieldInfo(FieldInfoContainer):
                 ("gas", "cooling_rate"),
                 sampling_type="cell",
                 function=_cooling_rate_field,
-                units=unit_system["energy"]/unit_system["time"],
+                units=unit_system["energy"]/unit_system["time"]/unit_system["length"]**3,
             )
 
             self.add_field(
