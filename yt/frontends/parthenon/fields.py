@@ -1,5 +1,6 @@
 from yt.fields.field_info_container import FieldInfoContainer
-from yt.utilities.physical_constants import kboltz, mh
+from yt.utilities.physical_constants import kboltz, mh, amu
+import numpy as np
 
 
 mag_units = "code_magnetic"
@@ -8,6 +9,8 @@ rho_units = "code_mass / code_length**3"
 vel_units = "code_length / code_time"
 mom_units = "code_mass / code_length**2 / code_time"
 eng_units = "code_mass / code_length / code_time**2"
+cr_units = "code_mass / code_length / code_time**3"
+time_units = "code_time"
 
 
 def velocity_field(j):
@@ -16,6 +19,15 @@ def velocity_field(j):
 
     return _velocity
 
+def _cooling_time_field(field, data):
+
+    cooling_time = data['Density'] * data[('parthenon','cell_volume')] * data['specific_thermal_energy'] / data['cooling_rate']
+
+    #Set cooling time where Cooling_Rate==0 to infinity
+    inf_ct_mask = data['cooling_rate'] == 0
+    cooling_time[ inf_ct_mask ] = yt.yt_quantity(np.inf,"s")
+
+    return cooling_time
 
 class ParthenonFieldInfo(FieldInfoContainer):
     known_other_fields = (
@@ -71,6 +83,7 @@ class ParthenonFieldInfo(FieldInfoContainer):
             )
 
             def _specific_thermal_energy(field, data):
+                #TODO This only accounts for ideal gases with adiabatic indices
                 return (
                     data["parthenon", "Pressure"]
                     / (data.ds.gamma - 1.0)
@@ -120,3 +133,47 @@ class ParthenonFieldInfo(FieldInfoContainer):
         setup_magnetic_field_aliases(
             self, "parthenon", ["MagneticField%d" % ax for ax in (1, 2, 3)]
         )
+
+        if "cooling_table_filename" in self.ds.specified_parameters:
+            #A cooling table is provided - compute "Cooling_Rate" and "Cooling_Time"
+
+            cooling_table = np.loadtxt(self.ds.specified_parameters["cooling_table_filename"])
+            log_temps   = cooling_table[:,self.ds.specified_parameters["cooling_table_log_temp_col"]]
+            log_lambdas = cooling_table[:,self.ds.specified_parameters["cooling_table_log_lambda_col"]]
+
+            lambdas_units = self.ds.quan(self.ds.specified_parameters["cooling_table_lambda_units_cgs"],"erg*cm**3/s")
+
+            def _cooling_rate_field(field, data,
+                    log_temps=log_temps,log_lambdas=log_lambdas,lambdas_units=lambdas_units):
+                log_temp = np.log10(data["gas","temperature"]).in_units("K").v
+                log_lambda = np.interp(log_temp,log_temps,log_lambdas)
+
+                #Zero cooling below the table
+                log_lambda[ log_temp < log_temps[0] ] = 0
+
+                #Interpolate free-free cooling (~T^1/2) above the table
+                log_lambda[log_temp > log_temps[-1]] = 0.5*log_temp[log_temp > log_temps[-1]] - 0.5*log_temps[-1] + log_lambdas[-1];
+
+                lambda_ = 10**(log_lambda)*lambdas_units
+
+                H_mass_fraction = data.parameters["H_mass_fraction"]
+
+                cr = lambda_*(data["gas","density"]*H_mass_fraction/amu)**2
+
+                return cr
+
+            self.add_field(
+                ("gas", "cooling_rate"),
+                sampling_type="cell",
+                function=_cooling_rate_field,
+                units=unit_system["energy"]/unit_system["time"],
+            )
+
+            self.add_field(
+                ("gas", "cooling_time"),
+                sampling_type="cell",
+                function=_cooling_time_field,
+                units=unit_system["time"],
+            )
+
+

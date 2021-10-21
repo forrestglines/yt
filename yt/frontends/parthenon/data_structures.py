@@ -12,7 +12,9 @@ from yt.funcs import get_pbar, mylog, setdefaultattr
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.utilities.chemical_formulas import compute_mu
+from yt.utilities.physical_ratios import _primordial_mass_fraction
 from yt.utilities.file_handler import HDF5FileHandler
+
 
 from .fields import ParthenonFieldInfo
 
@@ -283,6 +285,22 @@ class ParthenonDataset(Dataset):
             self.gamma = list(gamma_attrs.values())[0]
         else:
             self.gamma = 5./3.
+
+
+        He_mass_fraction_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith("He_mass_fraction")} 
+        if len(He_mass_fraction_attrs) >= 1 :
+            He_mass_fraction = list(He_mass_fraction_attrs.values())[0]
+            H_mass_fraction = 1.0 - self.He_mass_fraction
+            self.mu = 1 / (He_mass_fraction * 3. / 4. + (1 - He_mass_fraction) * 2)
+        else:
+            He_mass_fraction =  _primordial_mass_fraction["He"]
+            H_mass_fraction  =  _primordial_mass_fraction["H"]
+            self.mu = self.specified_parameters.get(
+                "mu", compute_mu(self.default_species_fields)
+            )
+
+        self.parameters["He_mass_fraction"] = He_mass_fraction
+        self.parameters["H_mass_fraction"]  = H_mass_fraction
 
         self.current_redshift = (
             self.omega_lambda
