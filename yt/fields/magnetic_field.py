@@ -2,10 +2,19 @@ import numpy as np
 
 from yt.fields.derived_field import ValidateParameter
 from yt.units import dimensions
-from yt.units.yt_array import ustack  # type: ignore
-from yt.utilities.math_utils import get_sph_phi_component, get_sph_theta_component
 
 from .field_plugin_registry import register_field_plugin
+
+cgs_normalizations = {"gaussian": 4.0 * np.pi, "lorentz_heaviside": 1.0}
+
+
+def get_magnetic_normalization(key: str) -> float:
+    if key not in cgs_normalizations:
+        raise ValueError(
+            "Unknown magnetic normalization convention. "
+            f"Got {key!r}, expected one of {tuple(cgs_normalizations)}"
+        )
+    return cgs_normalizations[key]
 
 
 @register_field_plugin
@@ -24,7 +33,7 @@ def setup_magnetic_field_fields(registry, ftype="gas", slice_info=None):
 
     def mag_factors(dims):
         if dims == dimensions.magnetic_field_cgs:
-            return 4.0 * np.pi
+            return getattr(ds, "_magnetic_factor", 4.0 * np.pi)
         elif dims == dimensions.magnetic_field_mks:
             return ds.units.physical_constants.mu_0
 
@@ -56,12 +65,6 @@ def setup_magnetic_field_fields(registry, ftype="gas", slice_info=None):
         units=unit_system["pressure"],
     )
 
-    registry.alias(
-        (ftype, "magnetic_energy"),
-        (ftype, "magnetic_energy_density"),
-        deprecate=("4.0.0", "4.1.0"),
-    )
-
     def _plasma_beta(field, data):
         return data[ftype, "pressure"] / data[ftype, "magnetic_energy_density"]
 
@@ -79,96 +82,102 @@ def setup_magnetic_field_fields(registry, ftype="gas", slice_info=None):
         units=unit_system["pressure"],
     )
 
+    _magnetic_field_poloidal_magnitude = None
+    _magnetic_field_toroidal_magnitude = None
+
     if registry.ds.geometry == "cartesian":
 
-        def _magnetic_field_poloidal(field, data):
-            normal = data.get_field_parameter("normal")
-
-            Bfields = ustack(
-                [
-                    data[ftype, "relative_magnetic_field_x"],
-                    data[ftype, "relative_magnetic_field_y"],
-                    data[ftype, "relative_magnetic_field_z"],
-                ]
+        def _magnetic_field_poloidal_magnitude(field, data):
+            B2 = (
+                data[ftype, "relative_magnetic_field_x"]
+                * data[ftype, "relative_magnetic_field_x"]
+                + data[ftype, "relative_magnetic_field_y"]
+                * data[ftype, "relative_magnetic_field_y"]
+                + data[ftype, "relative_magnetic_field_z"]
+                * data[ftype, "relative_magnetic_field_z"]
             )
-
-            theta = data["index", "spherical_theta"]
-            phi = data["index", "spherical_phi"]
-
-            return get_sph_theta_component(Bfields, theta, phi, normal)
-
-        def _magnetic_field_toroidal(field, data):
-            normal = data.get_field_parameter("normal")
-
-            Bfields = ustack(
-                [
-                    data[ftype, "relative_magnetic_field_x"],
-                    data[ftype, "relative_magnetic_field_y"],
-                    data[ftype, "relative_magnetic_field_z"],
-                ]
+            Bt2 = (
+                data[ftype, "magnetic_field_spherical_phi"]
+                * data[ftype, "magnetic_field_spherical_phi"]
             )
+            return np.sqrt(B2 - Bt2)
 
-            phi = data["index", "spherical_phi"]
-            return get_sph_phi_component(Bfields, phi, normal)
+    elif registry.ds.geometry in ("cylindrical", "polar"):
 
-    elif registry.ds.geometry == "cylindrical":
-
-        def _magnetic_field_poloidal(field, data):
+        def _magnetic_field_poloidal_magnitude(field, data):
             bm = data.get_field_parameter("bulk_magnetic_field")
-            r = data["index", "r"]
-            z = data["index", "z"]
-            d = np.sqrt(r * r + z * z)
-            rax = axis_names.find("r")
-            zax = axis_names.find("z")
-            return (data[ftype, "magnetic_field_r"] - bm[rax]) * (r / d) + (
-                data[ftype, "magnetic_field_z"] - bm[zax]
-            ) * (z / d)
+            rax = axis_names.index("r")
+            zax = axis_names.index("z")
 
-        def _magnetic_field_toroidal(field, data):
+            return np.sqrt(
+                (data[ftype, "magnetic_field_r"] - bm[rax]) ** 2
+                + (data[ftype, "magnetic_field_z"] - bm[zax]) ** 2
+            )
+
+        def _magnetic_field_toroidal_magnitude(field, data):
             ax = axis_names.find("theta")
             bm = data.get_field_parameter("bulk_magnetic_field")
             return data[ftype, "magnetic_field_theta"] - bm[ax]
 
     elif registry.ds.geometry == "spherical":
 
-        def _magnetic_field_poloidal(field, data):
-            ax = axis_names.find("theta")
+        def _magnetic_field_poloidal_magnitude(field, data):
             bm = data.get_field_parameter("bulk_magnetic_field")
-            return data[ftype, "magnetic_field_theta"] - bm[ax]
+            rax = axis_names.index("r")
+            tax = axis_names.index("theta")
 
-        def _magnetic_field_toroidal(field, data):
+            return np.sqrt(
+                (data[ftype, "magnetic_field_r"] - bm[rax]) ** 2
+                + (data[ftype, "magnetic_field_theta"] - bm[tax]) ** 2
+            )
+
+        def _magnetic_field_toroidal_magnitude(field, data):
             ax = axis_names.find("phi")
             bm = data.get_field_parameter("bulk_magnetic_field")
             return data[ftype, "magnetic_field_phi"] - bm[ax]
 
-    else:
+    if _magnetic_field_poloidal_magnitude is not None:
+        registry.add_field(
+            (ftype, "magnetic_field_poloidal_magnitude"),
+            sampling_type="local",
+            function=_magnetic_field_poloidal_magnitude,
+            units=u,
+            validators=[
+                ValidateParameter("normal"),
+                ValidateParameter("bulk_magnetic_field"),
+            ],
+        )
 
-        # Unidentified geometry--set to None
+    if _magnetic_field_toroidal_magnitude is not None:
+        registry.add_field(
+            (ftype, "magnetic_field_toroidal_magnitude"),
+            sampling_type="local",
+            function=_magnetic_field_toroidal_magnitude,
+            units=u,
+            validators=[
+                ValidateParameter("normal"),
+                ValidateParameter("bulk_magnetic_field"),
+            ],
+        )
 
-        _magnetic_field_toroidal = None
-        _magnetic_field_poloidal = None
-
-    registry.add_field(
-        (ftype, "magnetic_field_poloidal"),
-        sampling_type="local",
-        function=_magnetic_field_poloidal,
-        units=u,
-        validators=[
-            ValidateParameter("normal"),
-            ValidateParameter("bulk_magnetic_field"),
-        ],
-    )
-
-    registry.add_field(
-        (ftype, "magnetic_field_toroidal"),
-        sampling_type="local",
-        function=_magnetic_field_toroidal,
-        units=u,
-        validators=[
-            ValidateParameter("normal"),
-            ValidateParameter("bulk_magnetic_field"),
-        ],
-    )
+    if registry.ds.geometry == "cartesian":
+        registry.alias(
+            (ftype, "magnetic_field_toroidal_magnitude"),
+            (ftype, "magnetic_field_spherical_phi"),
+            units=u,
+        )
+        registry.alias(
+            (ftype, "magnetic_field_toroidal"),
+            (ftype, "magnetic_field_spherical_phi"),
+            units=u,
+            deprecate=("4.1.0", None),
+        )
+        registry.alias(
+            (ftype, "magnetic_field_poloidal"),
+            (ftype, "magnetic_field_spherical_theta"),
+            units=u,
+            deprecate=("4.1.0", None),
+        )
 
     def _alfven_speed(field, data):
         B = data[ftype, "magnetic_field_strength"]
@@ -195,9 +204,9 @@ def setup_magnetic_field_fields(registry, ftype="gas", slice_info=None):
     if dimensions.current_mks in b_units.dimensions.free_symbols:
         rm_scale = pc.qp.to("C", "SI") ** 3 / (4.0 * np.pi * pc.eps_0)
     else:
-        rm_scale = pc.qp ** 3 / pc.clight
+        rm_scale = pc.qp**3 / pc.clight
     rm_scale *= registry.ds.quan(1.0, "rad") / (
-        2.0 * np.pi * pc.me ** 2 * pc.clight ** 3
+        2.0 * np.pi * pc.me**2 * pc.clight**3
     )
     rm_units = registry.ds.quan(1.0, "rad/m**2").units / unit_system["length"]
 

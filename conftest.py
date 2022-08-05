@@ -1,10 +1,10 @@
 import os
 import shutil
+import sys
 import tempfile
 from importlib.util import find_spec
 from pathlib import Path
 
-import matplotlib
 import pytest
 import yaml
 from packaging.version import Version
@@ -19,7 +19,14 @@ from yt.utilities.answer_testing.testing_utilities import (
     data_dir_load,
 )
 
-MPL_VERSION = Version(matplotlib.__version__)
+if sys.version_info >= (3, 8):
+    from importlib.metadata import version
+else:
+    from importlib_metadata import version
+
+MPL_VERSION = Version(version("matplotlib"))
+NUMPY_VERSION = Version(version("numpy"))
+PILLOW_VERSION = Version(version("pillow"))
 
 
 def pytest_addoption(parser):
@@ -79,12 +86,6 @@ def pytest_configure(config):
     for value in (
         # treat most warnings as errors
         "error",
-        # >>> internal deprecation warnings with no obvious solution
-        # see https://github.com/yt-project/yt/issues/3381
-        (
-            r"ignore:The requested field name 'pd?[xyz]' is ambiguous and corresponds "
-            "to any one of the following field types.*:yt._maintenance.deprecation.VisibleDeprecationWarning"
-        ),
         # >>> warnings emitted by testing frameworks, or in testing contexts
         # we still have some yield-based tests, awaiting for transition into pytest
         "ignore::pytest.PytestCollectionWarning",
@@ -122,6 +123,28 @@ def pytest_configure(config):
             ),
         )
 
+    if MPL_VERSION < Version("3.5.2") and PILLOW_VERSION >= Version("9.1"):
+        # see https://github.com/matplotlib/matplotlib/pull/22766
+        config.addinivalue_line(
+            "filterwarnings",
+            r"ignore:NONE is deprecated and will be removed in Pillow 10 \(2023-07-01\)\. "
+            r"Use Resampling\.NEAREST or Dither\.NONE instead\.:DeprecationWarning",
+        )
+        config.addinivalue_line(
+            "filterwarnings",
+            r"ignore:ADAPTIVE is deprecated and will be removed in Pillow 10 \(2023-07-01\)\. "
+            r"Use Palette\.ADAPTIVE instead\.:DeprecationWarning",
+        )
+
+    if NUMPY_VERSION < Version("1.19") and MPL_VERSION < Version("3.3"):
+        # This warning is triggered from matplotlib in exactly one test at the time of writing
+        # and exclusively on the minimal test env. Upgrading numpy or matplotlib resolves
+        # the issue, so we can afford to ignore it.
+        config.addinivalue_line(
+            "filterwarnings",
+            "ignore:invalid value encountered in less_equal:RuntimeWarning",
+        )
+
     if find_spec("astropy") is not None:
         # at the time of writing, astropy's wheels are behind numpy's latest
         # version but this doesn't cause actual problems in our test suite
@@ -152,17 +175,6 @@ def pytest_configure(config):
             (
                 "ignore:The Stereographic projection in Proj older than 5.0.0 incorrectly "
                 "transforms points when central_latitude=0. Use this projection with caution.:UserWarning"
-            ),
-        )
-
-    if find_spec("xarray") is not None:
-        # this can be removed when upstream issue is closed and a fix published
-        # https://github.com/pydata/xarray/issues/6092
-        config.addinivalue_line(
-            "filterwarnings",
-            (
-                "ignore:distutils Version classes are deprecated. "
-                "Use packaging.version instead.:DeprecationWarning"
             ),
         )
 

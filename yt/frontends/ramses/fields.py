@@ -1,11 +1,12 @@
 import os
+from functools import partial
 
 import numpy as np
 
 from yt import units
 from yt._typing import KnownFieldsT
 from yt.fields.field_info_container import FieldInfoContainer
-from yt.frontends.ramses.io import convert_ramses_ages
+from yt.frontends.ramses.io import convert_ramses_conformal_time_to_physical_age
 from yt.utilities.cython_fortran_utils import FortranFile
 from yt.utilities.linear_interpolators import BilinearFieldInterpolator
 from yt.utilities.logger import ytLogger as mylog
@@ -162,11 +163,13 @@ class RAMSESFieldInfo(FieldInfoContainer):
         def star_age(field, data):
             if data.ds.cosmological_simulation:
                 conformal_age = data[ptype, "conformal_birth_time"]
-                formation_time = convert_ramses_ages(data.ds, conformal_age)
-                formation_time = data.ds.arr(formation_time, "code_time")
+                physical_age = convert_ramses_conformal_time_to_physical_age(
+                    data.ds, conformal_age
+                )
+                return data.ds.arr(physical_age, "code_time")
             else:
                 formation_time = data[ptype, "particle_birth_time"]
-            return data.ds.current_time - formation_time
+                return data.ds.current_time - formation_time
 
         self.add_field(
             (ptype, "star_age"),
@@ -262,7 +265,7 @@ class RAMSESFieldInfo(FieldInfoContainer):
         p.update(self.ds.parameters)
         ngroups = p["nGroups"]
         rt_c = p["rt_c_frac"] * units.c / (p["unit_l"] / p["unit_t"])
-        dens_conv = (p["unit_np"] / rt_c).value / units.cm ** 3
+        dens_conv = (p["unit_np"] / rt_c).value / units.cm**3
 
         ########################################
         # Adding the fields in the hydro_* files
@@ -277,25 +280,25 @@ class RAMSESFieldInfo(FieldInfoContainer):
             function=_temp_IR,
             units=self.ds.unit_system["temperature"],
         )
+
+        def _species_density(field, data, species: str):
+            return data["gas", f"{species}_fraction"] * data["gas", "density"]
+
+        def _species_mass(field, data, species: str):
+            return data["gas", f"{species}_density"] * data["index", "cell_volume"]
+
         for species in ["H_p1", "He_p1", "He_p2"]:
-
-            def _species_density(field, data):
-                return data["gas", f"{species}_fraction"] * data["gas", "density"]
-
             self.add_field(
                 ("gas", species + "_density"),
                 sampling_type="cell",
-                function=_species_density,
+                function=partial(_species_density, species=species),
                 units=self.ds.unit_system["density"],
             )
-
-            def _species_mass(field, data):
-                return data["gas", f"{species}_density"] * data["index", "cell_volume"]
 
             self.add_field(
                 ("gas", species + "_mass"),
                 sampling_type="cell",
-                function=_species_mass,
+                function=partial(_species_mass, species=species),
                 units=self.ds.unit_system["mass"],
             )
 
@@ -316,7 +319,7 @@ class RAMSESFieldInfo(FieldInfoContainer):
                 units=self.ds.unit_system["number_density"],
             )
 
-        flux_conv = p["unit_pf"] / units.cm ** 2 / units.s
+        flux_conv = p["unit_pf"] / units.cm**2 / units.s
 
         def gen_flux(key, igroup):
             def _photon_flux(field, data):

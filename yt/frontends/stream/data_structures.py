@@ -12,6 +12,7 @@ from more_itertools import always_iterable
 from yt.data_objects.field_data import YTFieldData
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.data_objects.index_subobjects.octree_subset import OctreeSubset
+from yt.data_objects.index_subobjects.stretched_grid import StretchedGrid
 from yt.data_objects.index_subobjects.unstructured_mesh import (
     SemiStructuredMesh,
     UnstructuredMesh,
@@ -28,7 +29,10 @@ from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.units import YTQuantity
 from yt.utilities.io_handler import io_registry
 from yt.utilities.lib.cykdtree import PyKDTree
-from yt.utilities.lib.misc_utilities import get_box_grids_level
+from yt.utilities.lib.misc_utilities import (
+    _obtain_coords_and_widths,
+    get_box_grids_level,
+)
 from yt.utilities.lib.particle_kdtree_tools import (
     estimate_density,
     generate_smoothing_length,
@@ -61,8 +65,26 @@ class StreamGrid(AMRGridPatch):
     def set_filename(self, filename):
         pass
 
-    def __repr__(self):
-        return "StreamGrid_%04i" % (self.id)
+    @property
+    def Parent(self):
+        if self._parent_id == -1:
+            return None
+        return self.index.grids[self._parent_id - self._id_offset]
+
+    @property
+    def Children(self):
+        return [self.index.grids[cid - self._id_offset] for cid in self._children_ids]
+
+
+class StreamStretchedGrid(StretchedGrid):
+    _id_offset = 0
+
+    def __init__(self, id, index):
+        cell_widths = index.grid_cell_widths[id - self._id_offset]
+        super().__init__(id, cell_widths, index=index)
+        self._children_ids = []
+        self._parent_id = -1
+        self.Level = -1
 
     @property
     def Parent(self):
@@ -91,6 +113,9 @@ class StreamHandler:
         io=None,
         particle_types=None,
         periodicity=(True, True, True),
+        *,
+        cell_widths=None,
+        parameters=None,
     ):
         if particle_types is None:
             particle_types = {}
@@ -108,6 +133,12 @@ class StreamHandler:
         self.io = io
         self.particle_types = particle_types
         self.periodicity = periodicity
+        self.cell_widths = cell_widths
+
+        if parameters is None:
+            self.parameters = {}
+        else:
+            self.parameters = parameters.copy()
 
     def get_fields(self):
         return self.fields.all_fields
@@ -136,6 +167,26 @@ class StreamHierarchy(GridIndex):
     def _count_grids(self):
         self.num_grids = self.stream_handler.num_grids
 
+    def _icoords_to_fcoords(self, icoords, ires, axes=None):
+        """
+        We check here that we have cell_widths, and if we do, we will provide them.
+        """
+        if self.grid_cell_widths is None:
+            return super()._icoords_to_fcoords(icoords, ires, axes)
+        if axes is None:
+            axes = [0, 1, 2]
+        # Transpose these by reversing the shape
+        coords = np.empty(icoords.shape, dtype="f8")
+        cell_widths = np.empty(icoords.shape, dtype="f8")
+        for i, ax in enumerate(axes):
+            coords[:, i], cell_widths[:, i] = _obtain_coords_and_widths(
+                icoords[:, i],
+                ires,
+                self.grid_cell_widths[0][ax],
+                self.ds.domain_left_edge[ax].d,
+            )
+        return coords, cell_widths
+
     def _parse_index(self):
         self.grid_dimensions = self.stream_handler.dimensions
         self.grid_left_edge[:] = self.stream_handler.left_edges
@@ -144,6 +195,11 @@ class StreamHierarchy(GridIndex):
         self.min_level = self.grid_levels.min()
         self.grid_procs = self.stream_handler.processor_ids
         self.grid_particle_count[:] = self.stream_handler.particle_count
+        if self.stream_handler.cell_widths is not None:
+            self.grid_cell_widths = self.stream_handler.cell_widths[:]
+            self.grid = StreamStretchedGrid
+        else:
+            self.grid_cell_widths = None
         mylog.debug("Copying reverse tree")
         self.grids = []
         # We enumerate, so it's 0-indexed id and 1-indexed pid
@@ -291,8 +347,11 @@ class StreamDataset(Dataset):
             default_species_fields=default_species_fields,
         )
 
+    @property
+    def filename(self):
+        return self.stream_handler.name
+
     def _parse_parameter_file(self):
-        self.basename = self.stream_handler.name
         self.parameters["CurrentTimeIdentifier"] = time.time()
         self.unique_identifier = self.parameters["CurrentTimeIdentifier"]
         self.domain_left_edge = self.stream_handler.domain_left_edge.copy()
@@ -307,6 +366,7 @@ class StreamDataset(Dataset):
         self.parameters["CosmologyHubbleConstantNow"] = 1.0
         self.parameters["CosmologyCurrentRedshift"] = 1.0
         self.parameters["HydroMethod"] = -1
+        self.parameters.update(self.stream_handler.parameters)
         if self.stream_handler.cosmology_simulation:
             self.cosmological_simulation = 1
             self.current_redshift = self.stream_handler.current_redshift
@@ -335,7 +395,12 @@ class StreamDataset(Dataset):
         cgs_units = ("cm", "g", "s", "cm/s", "gauss")
         for unit, attr, cgs_unit in zip(base_units, attrs, cgs_units):
             if isinstance(unit, str):
-                uq = self.quan(1.0, unit)
+                if unit == "code_magnetic":
+                    # If no magnetic unit was explicitly specified
+                    # we skip it now and take care of it at the bottom
+                    continue
+                else:
+                    uq = self.quan(1.0, unit)
             elif isinstance(unit, numeric_type):
                 uq = self.quan(unit, cgs_unit)
             elif isinstance(unit, YTQuantity):
@@ -345,6 +410,10 @@ class StreamDataset(Dataset):
             else:
                 raise RuntimeError(f"{attr} ({unit}) is invalid.")
             setattr(self, attr, uq)
+        if not hasattr(self, "magnetic_unit"):
+            self.magnetic_unit = np.sqrt(
+                4 * np.pi * self.mass_unit / (self.time_unit**2 * self.length_unit)
+            )
 
     @classmethod
     def _is_valid(cls, filename, *args, **kwargs):
@@ -656,11 +725,8 @@ class StreamOctreeSubset(OctreeSubset):
     domain_id = 1
     _domain_offset = 1
 
-    def __init__(
-        self, base_region, ds, oct_handler, over_refine_factor=1, num_ghost_zones=0
-    ):
-        self._over_refine_factor = over_refine_factor
-        self._num_zones = 1 << (over_refine_factor)
+    def __init__(self, base_region, ds, oct_handler, num_zones=2, num_ghost_zones=0):
+        self._num_zones = num_zones
         self.field_data = YTFieldData()
         self.field_parameters = {}
         self.ds = ds
@@ -679,9 +745,7 @@ class StreamOctreeSubset(OctreeSubset):
                 mylog.warning(
                     "Ghost zones will wrongly assume the domain to be periodic."
                 )
-            base_grid = StreamOctreeSubset(
-                base_region, ds, oct_handler, over_refine_factor
-            )
+            base_grid = StreamOctreeSubset(base_region, ds, oct_handler, num_zones)
             self._base_grid = base_grid
 
     def retrieve_ghost_zones(self, ngz, fields, smoothed=False):
@@ -693,7 +757,7 @@ class StreamOctreeSubset(OctreeSubset):
                 self.base_region,
                 self.ds,
                 self.oct_handler,
-                self._over_refine_factor,
+                self._num_zones,
                 num_ghost_zones=ngz,
             )
             self._subset_with_gz = new_subset
@@ -720,7 +784,7 @@ class StreamOctreeSubset(OctreeSubset):
         oct_handler = self.oct_handler
         ndim = self.ds.dimensionality
         cell_count = (
-            selector.count_octs(self.oct_handler, self.domain_id) * self.nz ** ndim
+            selector.count_octs(self.oct_handler, self.domain_id) * self.nz**ndim
         )
 
         gz_cache = getattr(self, "_ghost_zone_cache", None)
@@ -766,7 +830,7 @@ class StreamOctreeHandler(OctreeIndex):
             left_edge=self.ds.domain_left_edge,
             right_edge=self.ds.domain_right_edge,
             octree=self.ds.octree_mask,
-            over_refine=self.ds.over_refine_factor,
+            num_zones=self.ds.num_zones,
             partial_coverage=self.ds.partial_coverage,
         )
         self.oct_handler = OctreeContainer.load_octree(header)
@@ -779,7 +843,7 @@ class StreamOctreeHandler(OctreeIndex):
                     base_region,
                     self.dataset,
                     self.oct_handler,
-                    self.ds.over_refine_factor,
+                    self.ds.num_zones,
                 )
             ]
             dobj._chunk_info = subset

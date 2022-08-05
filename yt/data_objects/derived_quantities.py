@@ -17,7 +17,7 @@ def get_position_fields(field, data):
     field = data._determine_fields(field)[0]
     finfo = data.ds.field_info[field]
     if finfo.sampling_type == "particle":
-        if finfo.alias_field:
+        if finfo.is_alias:
             ftype = finfo.alias_name[0]
         else:
             ftype = finfo.name[0]
@@ -834,4 +834,4 @@ class SpinParameter(DerivedQuantity):
         e = values.pop(0).sum(dtype=np.float64)
         j = values.pop(0).sum(dtype=np.float64)
         m = values.pop(0).sum(dtype=np.float64)
-        return j * np.sqrt(np.abs(e)) / m ** 2.5 / gravitational_constant_cgs
+        return j * np.sqrt(np.abs(e)) / m**2.5 / gravitational_constant_cgs

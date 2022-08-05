@@ -71,7 +71,7 @@ class EnzoEGrid(AMRGridPatch):
     def add_child(self, child):
         if self._children_ids is None:
             self._children_ids = -1 * np.ones(
-                self._refine_by ** self.ds.dimensionality, dtype=np.int64
+                self._refine_by**self.ds.dimensionality, dtype=np.int64
             )
 
         a_block = self.block_name[1:].replace(":", "")
@@ -276,12 +276,15 @@ class EnzoEHierarchy(GridIndex):
             grid = self.grids[0]
             field_list, ptypes = self.io._read_field_names(grid)
             mylog.debug("Grid %s has: %s", grid.id, field_list)
+            sample_pfields = self.io.sample_pfields
         else:
             field_list = None
             ptypes = None
+            sample_pfields = None
         self.field_list = list(self.comm.mpi_bcast(field_list))
         self.dataset.particle_types = list(self.comm.mpi_bcast(ptypes))
         self.dataset.particle_types_raw = self.dataset.particle_types[:]
+        self.io.sample_pfields = self.comm.mpi_bcast(sample_pfields)
 
 
 class EnzoEDataset(Dataset):
@@ -354,6 +357,7 @@ class EnzoEDataset(Dataset):
         if os.path.exists(lcfn):
             with open(lcfn) as lf:
                 self.parameters = libconf.load(lf)
+
             cosmo = nested_dict_get(self.parameters, ("Physics", "cosmology"))
             if cosmo is not None:
                 self.cosmological_simulation = 1
@@ -444,14 +448,14 @@ class EnzoEDataset(Dataset):
             if mass is None:
                 density = nested_dict_get(p, ("Units", "density"))
                 if density is not None:
-                    mass = density * self.length_unit ** 3
+                    mass = density * self.length_unit**3
                 else:
                     mass = 1
             setdefaultattr(self, "mass_unit", self.quan(mass, "g"))
             setdefaultattr(self, "velocity_unit", self.length_unit / self.time_unit)
 
         magnetic_unit = np.sqrt(
-            4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit)
+            4 * np.pi * self.mass_unit / (self.time_unit**2 * self.length_unit)
         )
         magnetic_unit = np.float64(magnetic_unit.in_cgs())
         setdefaultattr(self, "magnetic_unit", self.quan(magnetic_unit, "gauss"))

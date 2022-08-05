@@ -3,11 +3,11 @@ from collections import defaultdict
 import numpy as np
 
 from yt.funcs import mylog
-from yt.utilities.io_handler import BaseIOHandler
+from yt.utilities.io_handler import BaseParticleIOHandler
 from yt.utilities.on_demand_imports import _h5py as h5py
 
 
-class IOHandlerGadgetFOFHDF5(BaseIOHandler):
+class IOHandlerGadgetFOFHDF5(BaseParticleIOHandler):
     _dataset_type = "gadget_fof_hdf5"
 
     def __init__(self, ds):
@@ -15,7 +15,9 @@ class IOHandlerGadgetFOFHDF5(BaseIOHandler):
         self.offset_fields = set()
 
     def _read_fluid_selection(self, chunks, selector, fields, size):
-        raise NotImplementedError
+        raise NotImplementedError(
+            "IOHandlerGadgetFOFHDF5 _read_fluid_selection not implemented yet"
+        )
 
     def _read_particle_coords(self, chunks, ptf):
         # This will read chunks and yield the results.
@@ -33,7 +35,7 @@ class IOHandlerGadgetFOFHDF5(BaseIOHandler):
                     x = coords[:, 0]
                     y = coords[:, 1]
                     z = coords[:, 2]
-                    yield ptype, (x, y, z)
+                    yield ptype, (x, y, z), 0.0
 
     def _yield_coordinates(self, data_file):
         ptypes = self.ds.particle_types_raw

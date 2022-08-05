@@ -1,5 +1,6 @@
 import numpy as np
 
+from yt.units.dimensions import current_mks  # type: ignore
 from yt.units.unit_object import Unit  # type: ignore
 from yt.utilities.chemical_formulas import compute_mu
 from yt.utilities.lib.misc_utilities import obtain_relative_velocity_vector
@@ -31,7 +32,7 @@ def setup_fluid_fields(registry, ftype="gas", slice_info=None):
 
     unit_system = registry.ds.unit_system
 
-    if unit_system.name == "cgs":
+    if unit_system.base_units[current_mks] is None:
         mag_units = "magnetic_field_cgs"
     else:
         mag_units = "magnetic_field_mks"
@@ -105,7 +106,7 @@ def setup_fluid_fields(registry, ftype="gas", slice_info=None):
 
     def _kinetic_energy_density(field, data):
         v = obtain_relative_velocity_vector(data)
-        return 0.5 * data[ftype, "density"] * (v ** 2).sum(axis=0)
+        return 0.5 * data[ftype, "density"] * (v**2).sum(axis=0)
 
     registry.add_field(
         (ftype, "kinetic_energy_density"),
@@ -113,18 +114,6 @@ def setup_fluid_fields(registry, ftype="gas", slice_info=None):
         function=_kinetic_energy_density,
         units=unit_system["pressure"],
         validators=[ValidateParameter("bulk_velocity")],
-    )
-
-    registry.alias(
-        (ftype, "kinetic_energy"),
-        (ftype, "kinetic_energy_density"),
-        deprecate=("4.0.0", "4.1.0"),
-    )
-
-    registry.alias(
-        (ftype, "thermal_energy"),
-        (ftype, "specific_thermal_energy"),
-        deprecate=("4.0.0", "4.1.0"),
     )
 
     def _mach_number(field, data):

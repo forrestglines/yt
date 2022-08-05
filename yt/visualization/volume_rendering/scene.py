@@ -1,7 +1,7 @@
 import builtins
 import functools
 from collections import OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 
@@ -349,8 +349,10 @@ class Scene:
             ax = fig.add_axes([0, 0, 1, 1])
             ax.set_axis_off()
             out = self._last_render
-            nz = out[:, :, :3][out[:, :, :3].nonzero()]
-            max_val = nz.mean() + sigma_clip * nz.std()
+            if sigma_clip is not None:
+                max_val = out._clipping_value(sigma_clip)
+            else:
+                max_val = out[:, :, :3].max()
             alpha = 255 * out[:, :, 3].astype("uint8")
             out = np.clip(out[:, :, :3] / max_val, 0.0, 1.0) * 255
             out = np.concatenate([out.astype("uint8"), alpha[..., None]], axis=-1)
@@ -367,6 +369,7 @@ class Scene:
         dpi: int = 100,
         sigma_clip: Optional[float] = None,
         render: bool = True,
+        tf_rect: Optional[List[float]] = None,
     ):
         r"""Saves the most recently rendered image of the Scene to disk,
         including an image of the transfer function and and user-defined
@@ -409,6 +412,12 @@ class Scene:
             If True, will render the scene before saving.
             If False, will use results of previous render if it exists.
             Default: True
+        tf_rect : sequence of floats, optional
+           A rectangle that defines the location of the transfer
+           function legend.  This is only used for the case where
+           there are multiple volume sources with associated transfer
+           functions.  tf_rect is of the form [x0, y0, width, height],
+           in figure coordinates.
 
         Returns
         -------
@@ -437,15 +446,41 @@ class Scene:
         """
         fname = self._setup_save(fname, render)
 
-        # which transfer function?
-        rs = self._get_render_sources()[0]
-        tf = rs.transfer_function
-        label = rs.data_source.ds._get_field_info(rs.field).get_label()
-
         ax = self._show_mpl(
             self._last_render.swapaxes(0, 1), sigma_clip=sigma_clip, dpi=dpi
         )
-        self._annotate(ax.axes, tf, rs, label=label, label_fmt=label_fmt)
+
+        # number of transfer functions?
+        num_trans_func = 0
+        for rs in self._get_render_sources():
+            if hasattr(rs, "transfer_function"):
+                num_trans_func += 1
+
+        # which transfer function?
+        if num_trans_func == 1:
+            rs = self._get_render_sources()[0]
+            tf = rs.transfer_function
+            label = rs.data_source.ds._get_field_info(rs.field).get_label()
+            self._annotate(ax.axes, tf, rs, label=label, label_fmt=label_fmt)
+        else:
+            # set the origin and width and height of the colorbar region
+            if tf_rect is None:
+                tf_rect = [0.80, 0.12, 0.12, 0.9]
+            cbx0, cby0, cbw, cbh = tf_rect
+
+            cbh_each = cbh / num_trans_func
+
+            for i, rs in enumerate(self._get_render_sources()):
+                ax = self._render_figure.add_axes(
+                    [cbx0, cby0 + i * cbh_each, 0.8 * cbw, 0.8 * cbh_each]
+                )
+                try:
+                    tf = rs.transfer_function
+                except AttributeError:
+                    pass
+                else:
+                    label = rs.data_source.ds._get_field_info(rs.field).get_label()
+                    self._annotate_multi(ax, tf, rs, label=label, label_fmt=label_fmt)
 
         # any text?
         if text_annotate is not None:
@@ -478,11 +513,9 @@ class Scene:
         ax.set_position([0, 0, 1, 1])
 
         if sigma_clip is not None:
-            nz = im[im > 0.0]
-            nim = im / (nz.mean() + sigma_clip * np.std(nz))
+            nim = im / im._clipping_value(sigma_clip)
             nim[nim > 1.0] = 1.0
             nim[nim < 0.0] = 0.0
-            del nz
         else:
             nim = im
         axim = ax.imshow(nim[:, :, :3] / nim[:, :, :3].max(), interpolation="bilinear")
@@ -503,6 +536,18 @@ class Scene:
             label_fmt=label_fmt,
             resolution=self.camera.resolution[0],
             log_scale=source.log_field,
+        )
+
+    def _annotate_multi(self, ax, tf, source, label, label_fmt):
+        ax.yaxis.set_label_position("right")
+        ax.yaxis.tick_right()
+        tf.vert_cbar(
+            ax=ax,
+            label=label,
+            label_fmt=label_fmt,
+            resolution=self.camera.resolution[0],
+            log_scale=source.log_field,
+            size=6,
         )
 
     def _validate(self):
@@ -862,9 +907,7 @@ class Scene:
 
         input_array : Iterable
             A tuple, list, or array to attach units to
-        units: String unit specification, unit symbol object, or astropy
-            units object
-        input_units : deprecated in favor of 'units'
+        units: String unit specification, unit symbol object, or astropy units object
             The units of the array. Powers must be specified using python syntax
             (cm**3, not cm^3).
         dtype : string or NumPy dtype object

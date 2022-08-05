@@ -8,7 +8,8 @@ from yt.utilities.answer_testing.framework import data_dir_load, requires_ds, sp
 
 bullet_h5 = "ArepoBullet/snapshot_150.hdf5"
 tng59_h5 = "TNGHalo/halo_59.hdf5"
-_tng59_bbox = [[45135.0, 51343.0], [51844.0, 56184.0], [60555.0, 63451.0]]
+_tng59_bbox = [[40669.34, 56669.34], [45984.04, 61984.04], [54114.9, 70114.9]]
+cr_h5 = "ArepoCosmicRays/snapshot_039.hdf5"
 
 
 @requires_file(bullet_h5)
@@ -62,6 +63,14 @@ def test_arepo_tng59():
 
 
 @requires_ds(tng59_h5)
+def test_arepo_tng59_periodicity():
+    ds1 = data_dir_load(tng59_h5)
+    assert ds1.periodicity == (True, True, True)
+    ds2 = data_dir_load(tng59_h5, kwargs={"bounding_box": _tng59_bbox})
+    assert ds2.periodicity == (False, False, False)
+
+
+@requires_ds(tng59_h5)
 def test_index_override():
     # This tests that we can supply an index_filename, and that when we do, it
     # doesn't get written if our bounding_box is overwritten.
@@ -80,3 +89,21 @@ def test_arepo_tng59_selection():
     ds = data_dir_load(tng59_h5, kwargs={"bounding_box": _tng59_bbox})
     psc = ParticleSelectionComparison(ds)
     psc.run_defaults()
+
+
+cr_fields = OrderedDict(
+    [
+        (("gas", "density"), None),
+        (("gas", "cosmic_ray_energy_density"), None),
+        (("gas", "cosmic_ray_pressure"), None),
+    ]
+)
+
+
+@requires_ds(cr_h5)
+def test_arepo_cr():
+    ds = data_dir_load(cr_h5)
+    assert ds.gamma_cr == ds.parameters["GammaCR"]
+    for test in sph_answer(ds, "snapshot_039", 28313510, cr_fields):
+        test_arepo_cr.__name__ = test.description
+        yield test

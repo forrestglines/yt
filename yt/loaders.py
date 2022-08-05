@@ -41,7 +41,9 @@ from yt.utilities.on_demand_imports import _pooch as pooch, _ratarmount as ratar
 # --- Loaders for known data formats ---
 
 
-def load(fn, *args, hint: Optional[str] = None, **kwargs):
+def load(
+    fn: Union[str, "os.PathLike[str]"], *args, hint: Optional[str] = None, **kwargs
+):
     """
     Load a Dataset or DatasetSeries object.
     The data format is automatically discovered, and the exact return type is the
@@ -51,7 +53,7 @@ def load(fn, *args, hint: Optional[str] = None, **kwargs):
 
     Parameters
     ----------
-    fn : str, os.Pathlike, or byte (types supported by os.path.expandusers)
+    fn : str, os.Pathlike[str]
         A path to the data location. This can be a file name, directory name, a glob
         pattern, or a url (for data types that support it).
 
@@ -162,6 +164,9 @@ def load_uniform_grid(
     geometry="cartesian",
     unit_system="cgs",
     default_species_fields=None,
+    *,
+    cell_widths=None,
+    parameters=None,
 ):
     r"""Load a uniform grid of data into yt as a
     :class:`~yt.frontends.stream.data_structures.StreamHandler`.
@@ -214,6 +219,9 @@ def load_uniform_grid(
     default_species_fields : string, optional
         If set, default species fields are created for H and He which also
         determine the mean molecular weight. Options are "ionized" and "neutral".
+    parameters: dictionary, optional
+        Optional dictionary used to populate the dataset parameters, useful
+        for storing dataset metadata.
 
     Examples
     --------
@@ -290,6 +298,10 @@ def load_uniform_grid(
         grid_right_edges = domain_right_edge
         grid_dimensions = domain_dimensions.reshape(nprocs, 3).astype("int32")
 
+    if cell_widths is not None:
+        # make sure this is a list, or else leave it as an empty guard value
+        cell_widths = [cell_widths]
+
     if length_unit is None:
         length_unit = "code_length"
     if mass_unit is None:
@@ -314,6 +326,8 @@ def load_uniform_grid(
         (length_unit, mass_unit, time_unit, velocity_unit, magnetic_unit),
         particle_types=particle_types,
         periodicity=periodicity,
+        cell_widths=cell_widths,
+        parameters=parameters,
     )
 
     handler.name = "UniformGridData"
@@ -361,6 +375,8 @@ def load_amr_grids(
     refine_by=2,
     unit_system="cgs",
     default_species_fields=None,
+    *,
+    parameters=None,
 ):
     r"""Load a set of grids of data into yt as a
     :class:`~yt.frontends.stream.data_structures.StreamHandler`.
@@ -422,6 +438,9 @@ def load_amr_grids(
     default_species_fields : string, optional
         If set, default species fields are created for H and He which also
         determine the mean molecular weight. Options are "ionized" and "neutral".
+    parameters: dictionary, optional
+        Optional dictionary used to populate the dataset parameters, useful
+        for storing dataset metadata.
 
     Examples
     --------
@@ -539,6 +558,7 @@ def load_amr_grids(
         (length_unit, mass_unit, time_unit, velocity_unit, magnetic_unit),
         particle_types=particle_types,
         periodicity=periodicity,
+        parameters=parameters,
     )
 
     handler.name = "AMRGridData"
@@ -579,6 +599,8 @@ def load_particles(
     unit_system="cgs",
     data_source=None,
     default_species_fields=None,
+    *,
+    parameters=None,
 ):
     r"""Load a set of particles into yt as a
     :class:`~yt.frontends.stream.data_structures.StreamParticleHandler`.
@@ -625,6 +647,9 @@ def load_particles(
     default_species_fields : string, optional
         If set, default species fields are created for H and He which also
         determine the mean molecular weight. Options are "ionized" and "neutral".
+    parameters: dictionary, optional
+        Optional dictionary used to populate the dataset parameters, useful
+        for storing dataset metadata.
 
     Examples
     --------
@@ -719,6 +744,7 @@ def load_particles(
         (length_unit, mass_unit, time_unit, velocity_unit, magnetic_unit),
         particle_types=particle_types,
         periodicity=periodicity,
+        parameters=parameters,
     )
 
     handler.name = "ParticleData"
@@ -754,6 +780,8 @@ def load_hexahedral_mesh(
     periodicity=(True, True, True),
     geometry="cartesian",
     unit_system="cgs",
+    *,
+    parameters=None,
 ):
     r"""Load a hexahedral mesh of data into yt as a
     :class:`~yt.frontends.stream.data_structures.StreamHandler`.
@@ -804,7 +832,9 @@ def load_hexahedral_mesh(
         be z, x, y, this would be: ("cartesian", ("z", "x", "y")).  The same
         can be done for other coordinates, for instance:
         ("spherical", ("theta", "phi", "r")).
-
+    parameters: dictionary, optional
+        Optional dictionary used to populate the dataset parameters, useful
+        for storing dataset metadata.
     """
     from yt.frontends.stream.data_structures import (
         StreamDictFieldHandler,
@@ -865,6 +895,7 @@ def load_hexahedral_mesh(
         (length_unit, mass_unit, time_unit, velocity_unit, magnetic_unit),
         particle_types=particle_types,
         periodicity=periodicity,
+        parameters=parameters,
     )
 
     handler.name = "HexahedralMeshData"
@@ -892,10 +923,13 @@ def load_octree(
     velocity_unit=None,
     magnetic_unit=None,
     periodicity=(True, True, True),
-    over_refine_factor=1,
+    over_refine_factor=None,
+    num_zones=2,
     partial_coverage=1,
     unit_system="cgs",
     default_species_fields=None,
+    *,
+    parameters=None,
 ):
     r"""Load an octree mask into yt.
 
@@ -911,7 +945,7 @@ def load_octree(
         This is a depth-first refinement mask for an Octree.  It should be
         of size n_octs * 8 (but see note about the root oct below), where
         each item is 1 for an oct-cell being refined and 0 for it not being
-        refined.  For over_refine_factors != 1, the children count will
+        refined.  For num_zones != 2, the children count will
         still be 8, so there will still be n_octs * 8 entries. Note that if
         the root oct is not refined, there will be only one entry
         for the root, so the size of the mask will be (n_octs - 1)*8 + 1.
@@ -941,6 +975,11 @@ def load_octree(
     default_species_fields : string, optional
         If set, default species fields are created for H and He which also
         determine the mean molecular weight. Options are "ionized" and "neutral".
+    num_zones : int
+        The number of zones along each dimension in an oct
+    parameters: dictionary, optional
+        Optional dictionary used to populate the dataset parameters, useful
+        for storing dataset metadata.
 
     Example
     -------
@@ -957,7 +996,7 @@ def load_octree(
     ...     octree_mask=octree_mask,
     ...     data=quantities,
     ...     bbox=bbox,
-    ...     over_refine_factor=0,
+    ...     num_zones=1,
     ...     partial_coverage=0,
     ... )
 
@@ -972,7 +1011,10 @@ def load_octree(
     if not isinstance(octree_mask, np.ndarray) or octree_mask.dtype != np.uint8:
         raise TypeError("octree_mask should be a Numpy array with type uint8")
 
-    nz = 1 << (over_refine_factor)
+    nz = num_zones
+    # for compatibility
+    if over_refine_factor is not None:
+        nz = 1 << over_refine_factor
     domain_dimensions = np.array([nz, nz, nz])
     nprocs = 1
     if bbox is None:
@@ -1016,6 +1058,7 @@ def load_octree(
         (length_unit, mass_unit, time_unit, velocity_unit, magnetic_unit),
         particle_types=particle_types,
         periodicity=periodicity,
+        parameters=parameters,
     )
 
     handler.name = "OctreeData"
@@ -1032,7 +1075,7 @@ def load_octree(
     )
     sds.octree_mask = octree_mask
     sds.partial_coverage = partial_coverage
-    sds.over_refine_factor = over_refine_factor
+    sds.num_zones = num_zones
 
     return sds
 
@@ -1052,6 +1095,8 @@ def load_unstructured_mesh(
     periodicity=(False, False, False),
     geometry="cartesian",
     unit_system="cgs",
+    *,
+    parameters=None,
 ):
     r"""Load an unstructured mesh of data into yt as a
     :class:`~yt.frontends.stream.data_structures.StreamHandler`.
@@ -1122,6 +1167,9 @@ def load_unstructured_mesh(
         be z, x, y, this would be: ("cartesian", ("z", "x", "y")).  The same
         can be done for other coordinates, for instance:
         ("spherical", ("theta", "phi", "r")).
+    parameters: dictionary, optional
+        Optional dictionary used to populate the dataset parameters, useful
+        for storing dataset metadata.
 
     Examples
     --------
@@ -1251,6 +1299,7 @@ def load_unstructured_mesh(
         (length_unit, mass_unit, time_unit, velocity_unit, magnetic_unit),
         particle_types=particle_types,
         periodicity=periodicity,
+        parameters=parameters,
     )
 
     handler.name = "UnstructuredMeshData"
@@ -1426,7 +1475,7 @@ def load_sample(
             fh.extractall(save_dir)
         os.remove(tmp_file)
     else:
-        os.replace(tmp_file, save_dir)
+        os.replace(tmp_file, os.path.join(save_dir, fn))
 
     loadable_path = Path.joinpath(save_dir, fn)
     if load_name not in str(loadable_path):

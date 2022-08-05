@@ -19,7 +19,7 @@ from yt.utilities.exceptions import YTNotInsideNotebook
 from yt.utilities.logger import ytLogger as mylog
 
 from ..data_objects.selection_objects.data_selection_objects import YTSelectionContainer
-from ._commons import DEFAULT_FONT_PROPERTIES, validate_image_name
+from ._commons import DEFAULT_FONT_PROPERTIES, MPL_VERSION, validate_image_name
 from .base_plot_types import ImagePlotMPL, PlotMPL
 from .plot_container import (
     ImagePlotContainer,
@@ -30,8 +30,6 @@ from .plot_container import (
     log_transform,
     validate_plot,
 )
-
-MPL_VERSION = Version(matplotlib.__version__)
 
 
 def invalidate_profile(f):
@@ -1130,10 +1128,12 @@ class PhasePlot(ImagePlotContainer):
             else:
                 cmap = self._colormap_config[f]
 
+            masked_data = data.copy()
+            masked_data[~self.profile.used] = np.nan
             self.plots[f] = PhasePlotMPL(
                 self.profile.x,
                 self.profile.y,
-                data,
+                masked_data,
                 x_scale,
                 y_scale,
                 z_scale,

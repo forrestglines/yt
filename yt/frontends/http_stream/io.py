@@ -1,13 +1,13 @@
 import numpy as np
 
 from yt.funcs import mylog
-from yt.utilities.io_handler import BaseIOHandler
+from yt.utilities.io_handler import BaseParticleIOHandler
 from yt.utilities.on_demand_imports import _requests as requests
 
 
-class IOHandlerHTTPStream(BaseIOHandler):
+class IOHandlerHTTPStream(BaseParticleIOHandler):
     _dataset_type = "http_particle_stream"
-    _vector_fields = ("Coordinates", "Velocity", "Velocities")
+    _vector_fields = {"Coordinates": 3, "Velocity": 3, "Velocities": 3}
 
     def __init__(self, ds):
         self._url = ds.base_url
@@ -43,7 +43,7 @@ class IOHandlerHTTPStream(BaseIOHandler):
                 s = self._open_stream(data_file, (ptype, "Coordinates"))
                 c = np.frombuffer(s, dtype="float64")
                 c.shape = (c.shape[0] / 3.0, 3)
-                yield ptype, (c[:, 0], c[:, 1], c[:, 2])
+                yield ptype, (c[:, 0], c[:, 1], c[:, 2]), 0.0
 
     def _read_particle_fields(self, chunks, ptf, selector):
         # Now we have all the sizes, and we can allocate

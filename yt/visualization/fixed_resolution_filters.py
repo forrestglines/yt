@@ -1,20 +1,31 @@
-from functools import wraps
+from abc import ABC, abstractmethod
+from functools import update_wrapper, wraps
 
 import numpy as np
 
-filter_registry = {}
+from yt._maintenance.deprecation import issue_deprecation_warning
+from yt.visualization.fixed_resolution import FixedResolutionBuffer
 
 
 def apply_filter(f):
+    issue_deprecation_warning(
+        "The apply_filter decorator is not used in yt any more and "
+        "will be removed in a future version. "
+        "Please do not use it.",
+        since="4.1",
+    )
+
     @wraps(f)
-    def newfunc(*args, **kwargs):
-        args[0]._filters.append((f.__name__, (args, kwargs)))
-        return args[0]
+    def newfunc(self, *args, **kwargs):
+        self._filters.append((f.__name__, (args, kwargs)))
+        # Invalidate the data of the frb to force its regeneration
+        self._data_valid = False
+        return self
 
     return newfunc
 
 
-class FixedResolutionBufferFilter:
+class FixedResolutionBufferFilter(ABC):
 
     """
     This object allows to apply data transformation directly to
@@ -22,14 +33,40 @@ class FixedResolutionBufferFilter:
     """
 
     def __init_subclass__(cls, *args, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-        filter_registry[cls.__name__] = cls
 
+        if cls.__init__.__doc__ is None:
+            # allow docstring definition at the class level instead of __init__
+            cls.__init__.__doc__ = cls.__doc__
+
+        # add a method to FixedResolutionBuffer
+        method_name = "apply_" + cls._filter_name
+
+        def closure(self, *args, **kwargs):
+            self._filters.append(cls(*args, **kwargs))
+            self._data_valid = False
+            return self
+
+        update_wrapper(
+            wrapper=closure,
+            wrapped=cls.__init__,
+            assigned=("__annotations__", "__doc__"),
+        )
+
+        closure.__name__ = method_name
+        setattr(FixedResolutionBuffer, method_name, closure)
+
+    @abstractmethod
     def __init__(self, *args, **kwargs):
+        """This method is required in subclasses, but the signature is arbitrary"""
         pass
 
-    def apply(self, buff):
+    @abstractmethod
+    def apply(self, buff: np.ndarray) -> np.ndarray:
         pass
+
+    def __call__(self, buff: np.ndarray) -> np.ndarray:
+        # alias to apply
+        return self.apply(buff)
 
 
 class FixedResolutionBufferGaussBeamFilter(FixedResolutionBufferFilter):
@@ -56,7 +93,7 @@ class FixedResolutionBufferGaussBeamFilter(FixedResolutionBufferFilter):
         l = np.linspace(-hnbeam, hnbeam, num=self.nbeam + 1)
         x, y = np.meshgrid(l, l)
         g2d = (1.0 / (sigma * np.sqrt(2.0 * np.pi))) * np.exp(
-            -((x / sigma) ** 2 + (y / sigma) ** 2) / (2 * sigma ** 2)
+            -((x / sigma) ** 2 + (y / sigma) ** 2) / (2 * sigma**2)
         )
         g2d /= g2d.max()
 

@@ -1,6 +1,7 @@
 import os
 import weakref
 from collections import defaultdict
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -333,6 +334,28 @@ class ARTIOIndex(Index):
         )
         return fields_to_return, fields_to_generate
 
+    def _icoords_to_fcoords(
+        self,
+        icoords: np.ndarray,
+        ires: np.ndarray,
+        axes: Optional[Tuple[int, ...]] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Accepts icoords and ires and returns appropriate fcoords and fwidth.
+        Mostly useful for cases where we have irregularly spaced or structured
+        grids.
+        """
+        dds = self.ds.domain_width[(axes,)] / (
+            self.ds.domain_dimensions[
+                axes,
+            ]
+            * self.ds.refine_by ** ires[:, None]
+        )
+        pos = (0.5 + icoords) * dds + self.ds.domain_left_edge[
+            axes,
+        ]
+        return pos, dds
+
 
 class ARTIODataset(Dataset):
     _handle = None
@@ -463,7 +486,7 @@ class ARTIODataset(Dataset):
 
             self.parameters["unit_m"] = self.artio_parameters["mass_unit"][0]
             self.parameters["unit_t"] = (
-                self.artio_parameters["time_unit"][0] * abox ** 2
+                self.artio_parameters["time_unit"][0] * abox**2
             )
             self.parameters["unit_l"] = self.artio_parameters["length_unit"][0] * abox
 

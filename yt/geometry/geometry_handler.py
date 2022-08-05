@@ -1,7 +1,7 @@
 import abc
 import os
 import weakref
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -47,6 +47,19 @@ class Index(ParallelAnalysisInterface, abc.ABC):
     @abc.abstractmethod
     def _detect_output_fields(self):
         pass
+
+    def _icoords_to_fcoords(
+        self,
+        icoords: np.ndarray,
+        ires: np.ndarray,
+        axes: Optional[Tuple[int, ...]] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # What's the use of raising NotImplementedError for this, when it's an
+        # abstract base class?  Well, only *some* of the subclasses have it --
+        # and for those that *don't*, we should not be calling it -- and since
+        # it's a semi-private method, it shouldn't be called outside of yt
+        # machinery.  So we shouldn't ever get here!
+        raise NotImplementedError
 
     def _initialize_state_variables(self):
         self._parallel_locking = False
@@ -244,12 +257,13 @@ class Index(ParallelAnalysisInterface, abc.ABC):
             raise NotImplementedError
 
 
-def cached_property(func):
-    # TODO: remove this once minimal supported version of Python reaches 3.8
-    # and replace with functools.cached
+def cacheable_property(func):
+    # not quite equivalent to functools.cached_property
+    # this decorator allows cached to be disabled via a self._cache flag attribute
     n = f"_{func.__name__}"
 
-    def cached_func(self):
+    @property
+    def cacheable_func(self):
         if self._cache and getattr(self, n, None) is not None:
             return getattr(self, n)
         if self.data_size is None:
@@ -257,11 +271,10 @@ def cached_property(func):
         else:
             tr = func(self)
         if self._cache:
-
             setattr(self, n, tr)
         return tr
 
-    return property(cached_func)
+    return cacheable_func
 
 
 class YTDataChunk:
@@ -299,7 +312,7 @@ class YTDataChunk:
         self.data_size = arrs.shape[0]
         return arrs
 
-    @cached_property
+    @cacheable_property
     def fcoords(self):
         if self._fast_index is not None:
             ci = self._fast_index.select_fcoords(self.dobj.selector, self.data_size)
@@ -318,7 +331,7 @@ class YTDataChunk:
             ind += c.shape[0]
         return ci
 
-    @cached_property
+    @cacheable_property
     def icoords(self):
         if self._fast_index is not None:
             ci = self._fast_index.select_icoords(self.dobj.selector, self.data_size)
@@ -335,7 +348,7 @@ class YTDataChunk:
             ind += c.shape[0]
         return ci
 
-    @cached_property
+    @cacheable_property
     def fwidth(self):
         if self._fast_index is not None:
             ci = self._fast_index.select_fwidth(self.dobj.selector, self.data_size)
@@ -354,7 +367,7 @@ class YTDataChunk:
             ind += c.shape[0]
         return ci
 
-    @cached_property
+    @cacheable_property
     def ires(self):
         if self._fast_index is not None:
             ci = self._fast_index.select_ires(self.dobj.selector, self.data_size)
@@ -371,12 +384,12 @@ class YTDataChunk:
             ind += c.size
         return ci
 
-    @cached_property
+    @cacheable_property
     def tcoords(self):
         self.dtcoords
         return self._tcoords
 
-    @cached_property
+    @cacheable_property
     def dtcoords(self):
         ct = np.empty(self.data_size, dtype="float64")
         cdt = np.empty(self.data_size, dtype="float64")
@@ -393,7 +406,7 @@ class YTDataChunk:
             ind += gt.size
         return cdt
 
-    @cached_property
+    @cacheable_property
     def fcoords_vertex(self):
         nodes_per_elem = self.dobj.index.meshes[0].connectivity_indices.shape[1]
         dim = self.dobj.ds.dimensionality
