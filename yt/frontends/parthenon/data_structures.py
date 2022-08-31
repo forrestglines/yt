@@ -152,8 +152,8 @@ class ParthenonDataset(Dataset):
         yrat = self._handle["Info"].attrs["RootGridDomain"][5]
         zrat = self._handle["Info"].attrs["RootGridDomain"][8]
         if xrat != 1.0 or yrat != 1.0 or zrat != 1.0:
-            self._index_class = ParthenonLogarithmicIndex
             self.logarithmic = True
+            raise ValueError("Logarithmic grids not yet supported in Parthenon frontend.")
         else:
             self._index_class = ParthenonHierarchy
             self.logarithmic = False
@@ -225,6 +225,11 @@ class ParthenonDataset(Dataset):
 
         dnames = self._handle["Info"].attrs["OutputDatasetNames"]
         num_components = self._handle["Info"].attrs["NumComponents"]
+
+        if "OutputFormatVersion" in self._handle["Info"].attrs.keys():
+            self.output_format_version = self._handle["Info"].attrs["OutputFormatVersion"]
+        else:
+            self.output_format_version = -1
 
         #Use duck typing to check if num_components is a single int or a list
         #h5py will return different types if there is a single variable or if there are more
