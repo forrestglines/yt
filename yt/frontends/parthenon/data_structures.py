@@ -8,13 +8,13 @@ import numpy as np
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.data_objects.index_subobjects.unstructured_mesh import SemiStructuredMesh
 from yt.data_objects.static_output import Dataset
+from yt.fields.magnetic_field import get_magnetic_normalization
 from yt.funcs import get_pbar, mylog, setdefaultattr
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.utilities.chemical_formulas import compute_mu
 from yt.utilities.physical_ratios import _primordial_mass_fraction
 from yt.utilities.file_handler import HDF5FileHandler
-
 
 from .fields import ParthenonFieldInfo
 
@@ -59,9 +59,6 @@ class ParthenonGrid(AMRGridPatch):
         return super(ParthenonGrid, self).retrieve_ghost_zones(
             n_zones, fields, all_levels=all_levels, smoothed=smoothed
         )
-
-    def __repr__(self):
-        return "ParthenonGrid_%04i (%s)" % (self.id, self.ActiveDimensions)
 
 
 class ParthenonHierarchy(GridIndex):
@@ -141,6 +138,8 @@ class ParthenonDataset(Dataset):
         parameters=None,
         units_override=None,
         unit_system="cgs",
+        default_species_fields=None,
+        magnetic_normalization="gaussian",
     ):
         self.fluid_types += ("parthenon",)
         if parameters is None:
@@ -158,18 +157,18 @@ class ParthenonDataset(Dataset):
         else:
             self._index_class = ParthenonHierarchy
             self.logarithmic = False
+        self._magnetic_factor = get_magnetic_normalization(magnetic_normalization)
         Dataset.__init__(
             self,
             filename,
             dataset_type,
             units_override=units_override,
             unit_system=unit_system,
+            default_species_fields=default_species_fields,
         )
-        self.filename = filename
         if storage_filename is None:
-            storage_filename = f"{filename.split('/')[-1]}.yt"
+            storage_filename = self.basename + ".yt"
         self.storage_filename = storage_filename
-        self.backup_filename = self.filename[:-4] + "_backup.gdf"
 
         #Read Parthenon Params into Params object
         self.Params = dict(self._handle["Params"].attrs)
@@ -200,14 +199,12 @@ class ParthenonDataset(Dataset):
                 mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
                 setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
 
-        #self.magnetic_unit = np.sqrt(
-        #    4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit)
-        #)
-        #self.magnetic_unit.convert_to_units("gauss")
-        magnetic_unit = np.sqrt(
-            4 * np.pi * self.mass_unit / (self.time_unit ** 2 * self.length_unit))
-        magnetic_unit = np.float64(magnetic_unit.in_cgs())
-        setdefaultattr(self, "magnetic_unit", self.quan(magnetic_unit, "gauss"))
+        self.magnetic_unit = np.sqrt(
+            self._magnetic_factor
+            * self.mass_unit
+            / (self.time_unit**2 * self.length_unit)
+        )
+        self.magnetic_unit.convert_to_units("gauss")
         self.velocity_unit = self.length_unit / self.time_unit
 
     def _parse_parameter_file(self):
@@ -220,7 +217,6 @@ class ParthenonDataset(Dataset):
         self.domain_right_edge = np.array([xmax, ymax, zmax], dtype="float64")
 
         self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"]]
-        #self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"].decode("utf-8")]
         self.domain_width = self.domain_right_edge - self.domain_left_edge
         self.domain_dimensions = self._handle["Info"].attrs["RootGridSize"]
 
@@ -242,7 +238,6 @@ class ParthenonDataset(Dataset):
         for dname, num_component in zip( dnames, num_components):
             for j in range(num_component):
                 fname = self._handle["Info"].attrs["ComponentNames"][j + component_name_offset]
-                #fname = self._handle["Info"].attrs["VariableNames"][k].decode("ascii", "ignore")
                 self._field_map[fname] = (dname, j)
                 k += 1
             component_name_offset  = int(component_name_offset + num_component)
@@ -256,7 +251,6 @@ class ParthenonDataset(Dataset):
             dimensionality = 1
         self.dimensionality = dimensionality
         self.current_time = self._handle["Info"].attrs["Time"]
-        self.unique_identifier = self.parameter_filename.__hash__()
         self.cosmological_simulation = False
         self.num_ghost_zones = 0
         self.field_ordering = "fortran"
@@ -321,7 +315,7 @@ class ParthenonDataset(Dataset):
     @classmethod
     def _is_valid(cls, filename, *args, **kwargs):
         try:
-            if filename.endswith("phdf"):
+            if filename.endswith(".phdf") or filename.endswith(".rhdf"):
                 return True
         except Exception:
             pass
@@ -331,5 +325,5 @@ class ParthenonDataset(Dataset):
     def _skip_cache(self):
         return True
 
-    def __repr__(self):
+    def __str__(self):
         return self.basename.rsplit(".", 1)[0]

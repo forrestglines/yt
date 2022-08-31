@@ -1,3 +1,4 @@
+from yt._typing import KnownFieldsT
 from yt.fields.field_info_container import FieldInfoContainer
 from yt.utilities.physical_constants import kboltz, mh, amu
 import numpy as np
@@ -28,7 +29,7 @@ def _cooling_time_field(field, data):
     return cooling_time
 
 class ParthenonFieldInfo(FieldInfoContainer):
-    known_other_fields = (
+    known_other_fields: KnownFieldsT = (
         ("Density", (rho_units, ["density"], None)),
         ("MomentumDensity1",(mom_units, ["MomentumDensity1"], None)),
         ("MomentumDensity2",(mom_units, ["MomentumDensity2"], None)),
