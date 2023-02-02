@@ -6,7 +6,7 @@ import sys
 import warnings
 from collections import defaultdict
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
 import matplotlib
 from matplotlib.colors import LogNorm, Normalize, SymLogNorm
@@ -14,7 +14,7 @@ from matplotlib.font_manager import FontProperties
 from unyt.dimensions import length
 
 from yt._maintenance.deprecation import issue_deprecation_warning
-from yt._typing import Quantity
+from yt._typing import FieldKey, Quantity
 from yt.config import ytcfg
 from yt.data_objects.time_series import DatasetSeries
 from yt.funcs import ensure_dir, is_sequence, iter_fields
@@ -33,11 +33,6 @@ from ._commons import (
     validate_image_name,
     validate_plot,
 )
-
-if sys.version_info >= (3, 8):
-    from typing import Final, Literal
-else:
-    from typing_extensions import Final, Literal
 
 latex_prefixes = {
     "u": r"\mu",
@@ -143,7 +138,7 @@ class PlotContainer(abc.ABC):
         self._font_color = None
         self._xlabel = None
         self._ylabel = None
-        self._minorticks: Dict[Tuple[str, str], bool] = {}
+        self._minorticks: Dict[FieldKey, bool] = {}
 
     @accepts_all_fields
     @invalidate_plot
@@ -322,6 +317,21 @@ class PlotContainer(abc.ABC):
     def _setup_plots(self):
         # Left blank to be overridden in subclasses
         pass
+
+    def render(self) -> None:
+        r"""Render plots.
+        This operation is expensive and usually doesn't need to be requested explicitly.
+        In most cases, yt handles rendering automatically and delays it as much as possible
+        to avoid redundant calls on each plot modification (e.g. via `annotate_*` methods).
+
+        However, valid use cases of this method include:
+        - fine control of render (and clear) operations when yt plots are combined with plot
+          customizations other than plot callbacks (`annotate_*`)
+        - testing
+        """
+        # this is a pure alias to the historic `_setup_plots` method
+        # which preserves backward compatibility for extension code
+        self._setup_plots()
 
     def _initialize_dataset(self, ts):
         if not isinstance(ts, DatasetSeries):
@@ -559,11 +569,14 @@ class PlotContainer(abc.ABC):
         else:
             axis = None
         weight = None
+        stddev = None
         plot_type = self._plot_type
         if plot_type in ["Projection", "OffAxisProjection"]:
             weight = self.data_source.weight_field
             if weight is not None:
                 weight = weight[1].replace(" ", "_")
+            if getattr(self.data_source, "moment", 1) == 2:
+                stddev = "standard_deviation"
         if "Cutting" in self.data_source.__class__.__name__:
             plot_type = "OffAxisSlice"
 
@@ -582,7 +595,8 @@ class PlotContainer(abc.ABC):
             name_elements.append(k.replace(" ", "_"))
             if weight:
                 name_elements.append(weight)
-
+            if stddev:
+                name_elements.append(stddev)
             name = "_".join(name_elements) + suffix
             names.append(v.save(name, mpl_kwargs))
         return names
@@ -606,7 +620,7 @@ class PlotContainer(abc.ABC):
         Examples
         --------
 
-        >>> from yt.mods import SlicePlot
+        >>> from yt import SlicePlot
         >>> slc = SlicePlot(
         ...     ds, "x", [("gas", "density"), ("gas", "velocity_magnitude")]
         ... )
@@ -1093,7 +1107,7 @@ class BaseLinePlot(PlotContainer, abc.ABC):
         axrect = self._get_axrect()
 
         pnh = NormHandler(self.data_source, display_units=self.data_source[field].units)
-        finfo = self.data_source.ds._get_field_info(*field)
+        finfo = self.data_source.ds._get_field_info(field)
         if not finfo.take_log:
             pnh.norm_type = Normalize
         plot = PlotMPL(self.figure_size, axrect, norm_handler=pnh)

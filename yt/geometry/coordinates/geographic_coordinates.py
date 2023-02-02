@@ -14,7 +14,7 @@ class GeographicCoordinateHandler(CoordinateHandler):
     name = "geographic"
 
     def __init__(self, ds, ordering=None):
-        if not ordering:
+        if ordering is None:
             ordering = ("latitude", "longitude", self.radial_axis)
         super().__init__(ds, ordering)
         self.image_units = {}
@@ -284,7 +284,6 @@ class GeographicCoordinateHandler(CoordinateHandler):
         )
         if do_transpose:
             buff = buff.transpose()
-        self.sanitize_buffer_fill_values(buff)
         return buff
 
     def convert_from_cartesian(self, coord):

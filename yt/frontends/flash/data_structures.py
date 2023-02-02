@@ -7,6 +7,7 @@ import numpy as np
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.data_objects.static_output import Dataset, ParticleFile, validate_index_order
 from yt.funcs import mylog, setdefaultattr
+from yt.geometry.api import Geometry
 from yt.geometry.geometry_handler import Index
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.particle_geometry_handler import ParticleIndex
@@ -379,7 +380,7 @@ class FLASHDataset(Dataset):
 
         self.dimensionality = dimensionality
 
-        self.geometry = self.parameters["geometry"]
+        self.geometry = Geometry(self.parameters["geometry"])
         # Determine base grid parameters
         if "lrefine_min" in self.parameters.keys():  # PARAMESH
             nblockx = self.parameters["nblockx"]
@@ -400,7 +401,7 @@ class FLASHDataset(Dataset):
         dle = np.array([self.parameters[f"{ax}min"] for ax in "xyz"]).astype("float64")
         dre = np.array([self.parameters[f"{ax}max"] for ax in "xyz"]).astype("float64")
         if self.dimensionality < 3:
-            for d in [dimensionality] + list(range(3 - dimensionality)):
+            for d in range(self.dimensionality, 3):
                 if dle[d] == dre[d]:
                     mylog.warning(
                         "Identical domain left edge and right edges "

@@ -153,13 +153,11 @@ class ParticleIndex(Index):
         else:
             dont_cache = False
 
-        # If we have applied a bounding box then we can't cache the
-        # ParticleBitmap because it is domain dependent
-        if getattr(ds, "_domain_override", False):
-            dont_cache = True
-
         if not hasattr(self.ds, "_file_hash"):
             self.ds._file_hash = self._generate_hash()
+
+        # Load Morton index from file if provided
+        fname = getattr(ds, "index_filename", None) or f"{ds.parameter_filename}.ewah"
 
         self.regions = ParticleBitmap(
             ds.domain_left_edge,
@@ -170,18 +168,6 @@ class ParticleIndex(Index):
             index_order1=order1,
             index_order2=order2,
         )
-
-        # Load Morton index from file if provided
-        def _current_fname():
-            if getattr(ds, "index_filename", None) is None:
-                fname = ds.parameter_filename + ".index{}_{}.ewah".format(
-                    self.regions.index_order1, self.regions.index_order2
-                )
-            else:
-                fname = ds.index_filename
-            return fname
-
-        fname = _current_fname()
 
         dont_load = dont_cache and not hasattr(ds, "index_filename")
         try:
@@ -197,7 +183,9 @@ class ParticleIndex(Index):
             self._initialize_coarse_index()
             self._initialize_refined_index()
             # We now update fname since index_order2 may have changed
-            fname = _current_fname()
+            fname = (
+                getattr(ds, "index_filename", None) or f"{ds.parameter_filename}.ewah"
+            )
             wdir = os.path.dirname(fname)
             if not dont_cache and os.access(wdir, os.W_OK):
                 # Sometimes os mis-reports whether a directory is writable,

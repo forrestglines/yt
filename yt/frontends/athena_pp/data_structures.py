@@ -9,6 +9,7 @@ from yt.data_objects.index_subobjects.unstructured_mesh import SemiStructuredMes
 from yt.data_objects.static_output import Dataset
 from yt.fields.magnetic_field import get_magnetic_normalization
 from yt.funcs import get_pbar, mylog
+from yt.geometry.api import Geometry
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.utilities.chemical_formulas import compute_mu
@@ -75,7 +76,7 @@ class AthenaPPLogarithmicIndex(UnstructuredIndex):
         nb = np.array([nbx, nby, nbz], dtype="int64")
         self.mesh_factors = np.ones(3, dtype="int64") * ((nb > 1).astype("int") + 1)
 
-        block_grid = -np.ones((nbx, nby, nbz, nlevel), dtype=np.int)
+        block_grid = -np.ones((nbx, nby, nbz, nlevel), dtype="int64")
         block_grid[log_loc[:, 0], log_loc[:, 1], log_loc[:, 2], levels[:]] = np.arange(
             num_blocks
         )
@@ -306,7 +307,9 @@ class AthenaPPDataset(Dataset):
         self.domain_left_edge = np.array([xmin, ymin, zmin], dtype="float64")
         self.domain_right_edge = np.array([xmax, ymax, zmax], dtype="float64")
 
-        self.geometry = geom_map[self._handle.attrs["Coordinates"].decode("utf-8")]
+        self.geometry = Geometry(
+            geom_map[self._handle.attrs["Coordinates"].decode("utf-8")]
+        )
         self.domain_width = self.domain_right_edge - self.domain_left_edge
         self.domain_dimensions = self._handle.attrs["RootGridSize"]
 
