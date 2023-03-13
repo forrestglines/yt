@@ -1,20 +1,18 @@
 import os
+import warnings
 import weakref
 from itertools import chain, product
-import warnings
 
 import numpy as np
 
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
-from yt.data_objects.index_subobjects.unstructured_mesh import SemiStructuredMesh
 from yt.data_objects.static_output import Dataset
 from yt.fields.magnetic_field import get_magnetic_normalization
-from yt.funcs import get_pbar, mylog, setdefaultattr
+from yt.funcs import mylog
 from yt.geometry.grid_geometry_handler import GridIndex
-from yt.geometry.unstructured_mesh_handler import UnstructuredIndex
 from yt.utilities.chemical_formulas import compute_mu
-from yt.utilities.physical_ratios import _primordial_mass_fraction
 from yt.utilities.file_handler import HDF5FileHandler
+from yt.utilities.physical_ratios import _primordial_mass_fraction
 
 from .fields import ParthenonFieldInfo
 
@@ -26,6 +24,7 @@ _cis = np.fromiter(
     chain.from_iterable(product([0, 1], [0, 1], [0, 1])), dtype=np.int64, count=8 * 3
 )
 _cis.shape = (8, 3)
+
 
 class ParthenonGrid(AMRGridPatch):
     _id_offset = 0
@@ -56,13 +55,12 @@ class ParthenonGrid(AMRGridPatch):
                 category=RuntimeWarning,
             )
             smoothed = False
-        return super(ParthenonGrid, self).retrieve_ghost_zones(
+        return super().retrieve_ghost_zones(
             n_zones, fields, all_levels=all_levels, smoothed=smoothed
         )
 
 
 class ParthenonHierarchy(GridIndex):
-
     grid = ParthenonGrid
     _dataset_type = "parthenon"
     _data_file = None
@@ -153,7 +151,9 @@ class ParthenonDataset(Dataset):
         zrat = self._handle["Info"].attrs["RootGridDomain"][8]
         if xrat != 1.0 or yrat != 1.0 or zrat != 1.0:
             self.logarithmic = True
-            raise ValueError("Logarithmic grids not yet supported in Parthenon frontend.")
+            raise ValueError(
+                "Logarithmic grids not yet supported in Parthenon frontend."
+            )
         else:
             self._index_class = ParthenonHierarchy
             self.logarithmic = False
@@ -170,7 +170,7 @@ class ParthenonDataset(Dataset):
             storage_filename = self.basename + ".yt"
         self.storage_filename = storage_filename
 
-        #Read Parthenon Params into Params object
+        # Read Parthenon Params into Params object
         self.Params = dict(self._handle["Params"].attrs)
 
     def _set_code_unit_attributes(self):
@@ -178,7 +178,7 @@ class ParthenonDataset(Dataset):
         Generates the conversion to various physical _units based on the
         parameter file
         """
-        #if "length_unit" not in self.units_override:
+        # if "length_unit" not in self.units_override:
         #    self.no_cgs_equiv_length = True
         for unit, cgs in [
             ("length", "cm"),
@@ -186,15 +186,20 @@ class ParthenonDataset(Dataset):
             ("mass", "g"),
             ("temperature", "K"),
         ]:
-
             attr_name = f"code_{unit}_cgs"
             # We set these to cgs for now, but they may have been overridden
-            unit_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith(attr_name)} 
+            unit_attrs = {
+                key: val
+                for key, val in self._handle["Params"].attrs.items()
+                if key.endswith(attr_name)
+            }
 
             if getattr(self, unit + "_unit", None) is not None:
                 continue
             elif len(unit_attrs) >= 1:
-                setattr(self, f"{unit}_unit", self.quan(list(unit_attrs.values())[0], cgs))
+                setattr(
+                    self, f"{unit}_unit", self.quan(list(unit_attrs.values())[0], cgs)
+                )
             else:
                 mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
                 setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
@@ -208,7 +213,6 @@ class ParthenonDataset(Dataset):
         self.velocity_unit = self.length_unit / self.time_unit
 
     def _parse_parameter_file(self):
-
         xmin, xmax = self._handle["Info"].attrs["RootGridDomain"][0:2]
         ymin, ymax = self._handle["Info"].attrs["RootGridDomain"][3:5]
         zmin, zmax = self._handle["Info"].attrs["RootGridDomain"][6:8]
@@ -227,26 +231,29 @@ class ParthenonDataset(Dataset):
         num_components = self._handle["Info"].attrs["NumComponents"]
 
         if "OutputFormatVersion" in self._handle["Info"].attrs.keys():
-            self.output_format_version = self._handle["Info"].attrs["OutputFormatVersion"]
+            self.output_format_version = self._handle["Info"].attrs[
+                "OutputFormatVersion"
+            ]
         else:
             self.output_format_version = -1
 
-        #Use duck typing to check if num_components is a single int or a list
-        #h5py will return different types if there is a single variable or if there are more
+        # Use duck typing to check if num_components is a single int or a list
+        # h5py will return different types if there is a single variable or if there are more
         try:
             iter(num_components)
-        except:
+        except TypeError:
             dnames = (dnames,)
             num_components = (num_components,)
 
         component_name_offset = 0
-        for dname, num_component in zip( dnames, num_components):
+        for dname, num_component in zip(dnames, num_components):
             for j in range(num_component):
-                fname = self._handle["Info"].attrs["ComponentNames"][j + component_name_offset]
+                fname = self._handle["Info"].attrs["ComponentNames"][
+                    j + component_name_offset
+                ]
                 self._field_map[fname] = (dname, j)
                 k += 1
-            component_name_offset  = int(component_name_offset + num_component)
-
+            component_name_offset = int(component_name_offset + num_component)
 
         self.refine_by = 2
         dimensionality = 3
@@ -262,44 +269,49 @@ class ParthenonDataset(Dataset):
         self.boundary_conditions = [1] * 6
 
         if "periodicity" in self.specified_parameters:
-            self._periodicity = tuple(
-                self.specified_parameters["periodicity"])
+            self._periodicity = tuple(self.specified_parameters["periodicity"])
         else:
             boundary_conditions = self._handle["Info"].attrs["BoundaryConditions"]
 
             inner_bcs = boundary_conditions[::2]
-            #outer_bcs = boundary_conditions[1::2]
+            # outer_bcs = boundary_conditions[1::2]
             ##Check self consistency
-            #for inner_bc,outer_bc in zip(inner_bcs,outer_bcs):
+            # for inner_bc,outer_bc in zip(inner_bcs,outer_bcs):
             #    if( (inner_bc == "periodicity" or outer_bc == "periodic") and inner_bc != outer_bc ):
             #        raise Exception("Inconsistent periodicity in boundary conditions")
 
-            self._periodicity = tuple((bc == "periodic" for bc in inner_bcs))
+            self._periodicity = tuple(bc == "periodic" for bc in inner_bcs)
 
-
-        gamma_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith("AdiabaticIndex")} 
+        gamma_attrs = {
+            key: val
+            for key, val in self._handle["Params"].attrs.items()
+            if key.endswith("AdiabaticIndex")
+        }
         if "gamma" in self.specified_parameters:
             self.gamma = float(self.specified_parameters["gamma"])
-        elif len(gamma_attrs) >= 1 :
+        elif len(gamma_attrs) >= 1:
             self.gamma = list(gamma_attrs.values())[0]
         else:
-            self.gamma = 5./3.
+            self.gamma = 5.0 / 3.0
 
-
-        He_mass_fraction_attrs = {key:val for key, val in self._handle["Params"].attrs.items() if key.endswith("He_mass_fraction")} 
-        if len(He_mass_fraction_attrs) >= 1 :
+        He_mass_fraction_attrs = {
+            key: val
+            for key, val in self._handle["Params"].attrs.items()
+            if key.endswith("He_mass_fraction")
+        }
+        if len(He_mass_fraction_attrs) >= 1:
             He_mass_fraction = list(He_mass_fraction_attrs.values())[0]
             H_mass_fraction = 1.0 - self.He_mass_fraction
-            self.mu = 1 / (He_mass_fraction * 3. / 4. + (1 - He_mass_fraction) * 2)
+            self.mu = 1 / (He_mass_fraction * 3.0 / 4.0 + (1 - He_mass_fraction) * 2)
         else:
-            He_mass_fraction =  _primordial_mass_fraction["He"]
-            H_mass_fraction  =  _primordial_mass_fraction["H"]
+            He_mass_fraction = _primordial_mass_fraction["He"]
+            H_mass_fraction = _primordial_mass_fraction["H"]
             self.mu = self.specified_parameters.get(
                 "mu", compute_mu(self.default_species_fields)
             )
 
         self.parameters["He_mass_fraction"] = He_mass_fraction
-        self.parameters["H_mass_fraction"]  = H_mass_fraction
+        self.parameters["H_mass_fraction"] = H_mass_fraction
 
         self.current_redshift = (
             self.omega_lambda
@@ -310,7 +322,7 @@ class ParthenonDataset(Dataset):
         self.parameters[
             "HydroMethod"
         ] = 0  # Hardcode for now until field staggering is supported.
-        
+
         self.parameters["Gamma"] = self.gamma
 
         self.mu = self.specified_parameters.get(
