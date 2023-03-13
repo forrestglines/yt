@@ -149,7 +149,7 @@ class PlotCallback(ABC):
             ax = plot.data.axis
             # if this is an on-axis projection or slice, then
             # just grab the appropriate 2 coords for the on-axis view
-            if ax >= 0 and ax <= 2:
+            if ax is not None:
                 (xi, yi) = (
                     plot.data.ds.coordinates.x_axis[ax],
                     plot.data.ds.coordinates.y_axis[ax],
@@ -159,7 +159,7 @@ class PlotCallback(ABC):
             # if this is an off-axis project or slice (ie cutting plane)
             # we have to calculate where the data coords fall in the projected
             # plane
-            elif ax == 4:
+            else:
                 # transpose is just to get [[x1,x2,...],[y1,y2,...],[z1,z2,...]]
                 # in the same order as plot.data.center for array arithmetic
                 coord_vectors = coord_copy.transpose() - plot.data.center
@@ -168,8 +168,6 @@ class PlotCallback(ABC):
                 # Transpose into image coords. Due to VR being not a
                 # right-handed coord system
                 ret_coord = (y, x)
-            else:
-                raise ValueError("Object being plotted must have a `data.axis` defined")
 
         # if the position is already two-coords, it is expected to be
         # in the proper projected orientation
@@ -715,7 +713,6 @@ class BaseQuiverCallback(PlotCallback, ABC):
         pass
 
     def __call__(self, plot):
-
         # construct mesh
         bounds = self._physical_bounds(plot)
         nx = plot.raw_image_shape[1] // self.factor[0]
@@ -1270,7 +1267,6 @@ class StreamlineCallback(PlotCallback):
             )
 
             if self.display_threshold:
-
                 mask = field_colors > self.display_threshold
                 lwdefault = matplotlib.rcParams["lines.linewidth"]
 
@@ -2281,7 +2277,6 @@ class MeshLinesCallback(PlotCallback):
         return new_coords, new_connects
 
     def __call__(self, plot):
-
         index = plot.ds.index
         if not issubclass(type(index), UnstructuredIndex):
             raise RuntimeError(
@@ -2480,7 +2475,6 @@ class TimestampCallback(PlotCallback):
         text_args=None,
         inset_box_args=None,
     ):
-
         def_text_args = {
             "color": "white",
             "horizontalalignment": "center",
@@ -2719,7 +2713,6 @@ class ScaleCallback(PlotCallback):
         inset_box_args=None,
         scale_text_format="{scale} {units}",
     ):
-
         def_size_bar_args = {"pad": 0.05, "sep": 5, "borderpad": 1, "color": "w"}
 
         def_inset_box_args = {
@@ -2819,8 +2812,8 @@ class ScaleCallback(PlotCallback):
             except AttributeError as e:
                 raise AttributeError(
                     "Cannot set text_args keyword "
-                    "to include '%s' because MPL's fontproperties object does "
-                    "not contain function '%s'." % (key, setter_func)
+                    f"to include {key!r} because MPL's fontproperties object does "
+                    f"not contain function {setter_func!r}"
                 ) from e
 
         # this "anchors" the size bar to a box centered on self.pos in axis

@@ -19,17 +19,13 @@ osx|macOS)
     ;;
 esac
 
-# Disable excessive output
-echo "[yt]\nlog_level = 50" > yt.toml
-cat yt.toml
-
 # Sets default backend to Agg
 cp tests/matplotlibrc .
 
 # Step 1: pre-install required packages
 if [[ "${RUNNER_OS}" == "Windows" ]] && [[ ${dependencies} != "minimal" ]]; then
     # windows_conda_requirements.txt is a survivance of test_requirements.txt
-    # keep in sync: setup.cfg
+    # keep in sync: pyproject.toml
     while read requirement; do conda install --yes $requirement; done < tests/windows_conda_requirements.txt
 else
     # upgrading pip to guarantee installing extra dependencies with [full] is supported
@@ -55,5 +51,9 @@ else
    # test with no special requirements
    python -m pip install -e ".[test]"
 fi
+
+# Disable excessive output
+yt config set --local yt log_level 50
+cat yt.toml
 
 set +x

@@ -163,9 +163,8 @@ class DerivedField:
             self.units = units.decode("utf-8")
         else:
             raise FieldUnitsError(
-                "Cannot handle units '%s' (type %s). "
-                "Please provide a string or Unit "
-                "object." % (units, type(units))
+                f"Cannot handle units {units!r} (type {type(units)}). "
+                "Please provide a string or Unit object."
             )
         if output_units is None:
             output_units = self.units
@@ -394,7 +393,6 @@ class DerivedField:
         p = re.compile("_p[0-9]+_")
         m = p.search(self.name[1])
         if m is not None:
-
             # Find the ionization state
             pstr = m.string[m.start() + 1 : m.end() - 1]
             segments = self.name[1].split("_")

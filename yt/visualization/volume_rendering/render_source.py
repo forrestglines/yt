@@ -72,8 +72,10 @@ def set_raytracing_engine(
 
     if engine == "embree":
         try:
-            from yt.utilities.lib.embree_mesh import mesh_construction  # type: ignore
-            from yt.utilities.lib.embree_mesh import mesh_traversal  # type: ignore
+            from yt.utilities.lib.embree_mesh import (  # type: ignore
+                mesh_construction,
+                mesh_traversal,
+            )
         except (ImportError, ValueError) as exc:
             # Catch ValueError in case size of objects in Cython change
             warnings.warn(
@@ -1285,7 +1287,6 @@ class BoxSource(LineSource):
     """
 
     def __init__(self, left_edge, right_edge, color=None):
-
         assert left_edge.shape == (3,)
         assert right_edge.shape == (3,)
 
