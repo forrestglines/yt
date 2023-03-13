@@ -263,7 +263,6 @@ class ParthenonDataset(Dataset):
             dimensionality = 1
         self.dimensionality = dimensionality
         self.current_time = self._handle["Info"].attrs["Time"]
-        self.cosmological_simulation = False
         self.num_ghost_zones = 0
         self.field_ordering = "fortran"
         self.boundary_conditions = [1] * 6
@@ -290,7 +289,7 @@ class ParthenonDataset(Dataset):
         if "gamma" in self.specified_parameters:
             self.gamma = float(self.specified_parameters["gamma"])
         elif len(gamma_attrs) >= 1:
-            self.gamma = list(gamma_attrs.values())[0]
+            self.gamma = next(iter(gamma_attrs.values()))
         else:
             self.gamma = 5.0 / 3.0
 
@@ -300,7 +299,7 @@ class ParthenonDataset(Dataset):
             if key.endswith("He_mass_fraction")
         }
         if len(He_mass_fraction_attrs) >= 1:
-            He_mass_fraction = list(He_mass_fraction_attrs.values())[0]
+            He_mass_fraction = next(iter(He_mass_fraction_attrs.values()))
             H_mass_fraction = 1.0 - self.He_mass_fraction
             self.mu = 1 / (He_mass_fraction * 3.0 / 4.0 + (1 - He_mass_fraction) * 2)
         else:
@@ -313,11 +312,13 @@ class ParthenonDataset(Dataset):
         self.parameters["He_mass_fraction"] = He_mass_fraction
         self.parameters["H_mass_fraction"] = H_mass_fraction
 
-        self.current_redshift = (
-            self.omega_lambda
-        ) = (
-            self.omega_matter
-        ) = self.hubble_constant = self.cosmological_simulation = 0.0
+        # no support for cosmological sims in AthenaPK/Parthenon yet
+        self.current_redshift = 0.0
+        self.omega_lambda = 0.0
+        self.omega_matter = 0.0
+        self.hubble_constant = 0.0
+        self.cosmological_simulation = 0
+
         self.parameters["Time"] = self.current_time  # Hardcode time conversion for now.
         self.parameters[
             "HydroMethod"
@@ -330,13 +331,8 @@ class ParthenonDataset(Dataset):
         )
 
     @classmethod
-    def _is_valid(cls, filename, *args, **kwargs):
-        try:
-            if filename.endswith(".phdf") or filename.endswith(".rhdf"):
-                return True
-        except Exception:
-            pass
-        return False
+    def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
+        return filename.endswith((".phdf", ".rhdf"))
 
     @property
     def _skip_cache(self):
