@@ -1,6 +1,6 @@
 import numpy as np
 
-from yt.frontends.athena_pp.api import AthenaPPDataset
+from yt.frontends.parthenon.api import ParthenonDataset
 from yt.loaders import load
 from yt.testing import (
     assert_allclose,
@@ -32,7 +32,7 @@ def test_disk():
     for field in _fields_disk:
 
         def field_func(name):
-            return dd[field]
+            return dd[name]
 
         yield GenericArrayTest(ds, field_func, args=[field])
 
@@ -73,4 +73,4 @@ def test_units_override():
 
 @requires_file(AM06)
 def test_AthenaPPDataset():
-    assert isinstance(data_dir_load(AM06), AthenaPPDataset)
+    assert isinstance(data_dir_load(AM06), ParthenonDataset)
