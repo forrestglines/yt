@@ -495,7 +495,7 @@ class VelocityCallback(PlotCallback):
 
             if geometry is Geometry.POLAR or geometry is Geometry.CYLINDRICAL:
                 if axis_names[plot.data.axis] == "z":
-                    # polar_z and cyl_z is aligned with carteian_z
+                    # polar_z and cyl_z is aligned with cartesian_z
                     # should convert r-theta plane to x-y plane
                     xv = (ftype, "velocity_cartesian_x")
                     yv = (ftype, "velocity_cartesian_y")
@@ -628,7 +628,7 @@ class MagFieldCallback(PlotCallback):
 
             if geometry is Geometry.POLAR or geometry is Geometry.CYLINDRICAL:
                 if axis_names[plot.data.axis] == "z":
-                    # polar_z and cyl_z is aligned with carteian_z
+                    # polar_z and cyl_z is aligned with cartesian_z
                     # should convert r-theta plane to x-y plane
                     xv = (ftype, "magnetic_field_cartesian_x")
                     yv = (ftype, "magnetic_field_cartesian_y")
@@ -1213,7 +1213,13 @@ class StreamlineCallback(PlotCallback):
     """
 
     _type_name = "streamlines"
-    _supported_geometries = ("cartesian", "spectral_cube", "polar", "cylindrical")
+    _supported_geometries = (
+        "cartesian",
+        "spectral_cube",
+        "polar",
+        "cylindrical",
+        "spherical",
+    )
     _incompatible_plot_types = ("OffAxisProjection", "Particle")
 
     def __init__(
@@ -1708,7 +1714,7 @@ class ArrowCallback(PlotCallback):
             dy = (yy1 - yy0) * 2 ** (0.5) * self.length
         # If the arrow is 0 length
         if dx == dy == 0:
-            warnings.warn("The arrow has zero length.  Not annotating.")
+            warnings.warn("The arrow has zero length. Not annotating.", stacklevel=2)
             return
 
         x, y, dx, dy = self._sanitize_xy_order(plot, x, y, dx, dy)
@@ -2580,7 +2586,8 @@ class TimestampCallback(PlotCallback):
         if self.redshift and not hasattr(plot.data.ds, "current_redshift"):
             warnings.warn(
                 f"dataset {plot.data.ds} does not have current_redshift attribute. "
-                "Set redshift=False to silence this warning."
+                "Set redshift=False to silence this warning.",
+                stacklevel=2,
             )
             self.redshift = False
 
@@ -3052,7 +3059,13 @@ class LineIntegralConvolutionCallback(PlotCallback):
     """
 
     _type_name = "line_integral_convolution"
-    _supported_geometries = ("cartesian", "spectral_cube", "polar", "cylindrical")
+    _supported_geometries = (
+        "cartesian",
+        "spectral_cube",
+        "polar",
+        "cylindrical",
+        "spherical",
+    )
     _incompatible_plot_types = ("LineIntegralConvolutionCallback",)
 
     def __init__(

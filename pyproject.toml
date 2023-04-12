@@ -8,7 +8,7 @@ requires = [
   # Cython 3.0 is the next version after 0.29, and a major change,
   # we forbid it until we can properly test against it
   # https://github.com/yt-project/yt/issues/4355
-  "Cython>=0.29.21,<3.0",
+  "Cython>=0.29.33,<3.0",
   "oldest-supported-numpy",
 ]
 
@@ -51,7 +51,6 @@ dependencies = [
     "numpy>=1.17.5",
     "packaging>=20.9",
     "pillow>=6.2.1", # transitive dependency via MPL (>=3.3)
-    "pyparsing>=2.0.3", # transitive dependency via packaging and MPL
     "tomli-w>=0.4.0",
     "tqdm>=3.4.0",
     "unyt>=2.9.2,<3.0", # see https://github.com/yt-project/yt/issues/4162
@@ -211,7 +210,6 @@ minimal = [
     "numpy==1.17.5",
     "packaging==20.9",
     "pillow==6.2.1",
-    "pyparsing==2.0.3",
     "tomli-w==0.4.0",
     "tqdm==3.4.0",
     "unyt==2.9.2",
@@ -269,7 +267,6 @@ exclude = '''
 '''
 
 [tool.ruff]
-target-version = "py38"  # https://github.com/charliermarsh/ruff/issues/2039
 exclude = [
     "doc",
     "benchmarks",
@@ -297,6 +294,7 @@ select = [
 ignore = [
     "E501",  # line too long
     "E741",  # Do not use variables named 'I', 'O', or 'l'
+    "B018",  # Found useless expression. # disabled because ds.index is idiomatic
 ]
 
 
