@@ -9,7 +9,7 @@ from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.data_objects.static_output import Dataset
 from yt.fields.magnetic_field import get_magnetic_normalization
 from yt.funcs import mylog
-from yt.geometry.geometry_enum import Geometry
+from yt.geometry.api import Geometry
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.utilities.chemical_formulas import compute_mu
 from yt.utilities.file_handler import HDF5FileHandler
@@ -53,6 +53,7 @@ class ParthenonGrid(AMRGridPatch):
                 "ghost-zones interpolation/smoothing is not "
                 "currently supported for Parthenon data.",
                 category=RuntimeWarning,
+                stacklevel=2,
             )
             smoothed = False
         return super().retrieve_ghost_zones(
@@ -184,8 +185,10 @@ class ParthenonDataset(Dataset):
             # We set these to cgs for now, but they may have been overridden
             if getattr(self, unit + "_unit", None) is not None:
                 continue
-            elif unit_param in self.params:
-                setattr(self, f"{unit}_unit", self.quan(self.params[unit_param], cgs))
+            elif unit_param in self.parameters:
+                setattr(
+                    self, f"{unit}_unit", self.quan(self.parameters[unit_param], cgs)
+                )
             else:
                 mylog.warning(f"Assuming 1.0 = 1.0 {cgs}")
                 setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
@@ -199,8 +202,12 @@ class ParthenonDataset(Dataset):
         self.velocity_unit = self.length_unit / self.time_unit
 
     def _parse_parameter_file(self):
-        # Read Parthenon Params into Params object
-        self.params = dict(self._handle["Params"].attrs)
+        for key, val in self._handle["Params"].attrs.items():
+            if key in self.parameters.keys():
+                mylog.warning(
+                    f"Overriding existing 'f{key}' key in ds.parameters from data 'Params'"
+                )
+            self.parameters[key] = val
 
         xmin, xmax = self._handle["Info"].attrs["RootGridDomain"][0:2]
         ymin, ymax = self._handle["Info"].attrs["RootGridDomain"][3:5]
@@ -272,19 +279,19 @@ class ParthenonDataset(Dataset):
 
         if "gamma" in self.specified_parameters:
             self.gamma = float(self.specified_parameters["gamma"])
-        elif "Hydro/AdiabaticIndex" in self.params:
-            self.gamma = self.params["Hydro/AdiabaticIndex"]
+        elif "Hydro/AdiabaticIndex" in self.parameters:
+            self.gamma = self.parameters["Hydro/AdiabaticIndex"]
         else:
             mylog.warning(
                 "Adiabatic index gamma could not be determined. Falling back to 5/3."
             )
             self.gamma = 5.0 / 3.0
 
-        if "Hydro/mu" in self.params:
-            self.mu = self.params["Hydro/mu"]
+        if "Hydro/mu" in self.parameters:
+            self.mu = self.parameters["Hydro/mu"]
         # Legacy He_mass_fraction parameter implemented in AthenaPK
-        elif "Hydro/He_mass_fraction" in self.params:
-            He_mass_fraction = self.params["Hydro/He_mass_fraction"]
+        elif "Hydro/He_mass_fraction" in self.parameters:
+            He_mass_fraction = self.parameters["Hydro/He_mass_fraction"]
             self.mu = 1 / (He_mass_fraction * 3.0 / 4.0 + (1 - He_mass_fraction) * 2)
         # Fallback to primorial gas composition (and show warning)
         else:
