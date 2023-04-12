@@ -2,7 +2,7 @@ import numpy as np
 
 from yt._typing import KnownFieldsT
 from yt.fields.field_info_container import FieldInfoContainer
-from yt.utilities.physical_constants import amu, kboltz, mh
+from yt.utilities.physical_constants import amu, kboltz
 
 mag_units = "code_magnetic"
 pres_units = "code_mass/(code_length*code_time**2)"
@@ -122,11 +122,12 @@ class ParthenonFieldInfo(FieldInfoContainer):
             )
 
         # Add temperature field
+        # TODO(discuss use of amu versus mh -- also in AthenaPK)
         def _temperature(field, data):
             return (
                 (data["gas", "pressure"] / data["gas", "density"])
                 * data.ds.mu
-                * mh
+                * amu
                 / kboltz
             )
 

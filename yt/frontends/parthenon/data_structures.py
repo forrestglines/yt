@@ -12,7 +12,6 @@ from yt.funcs import mylog
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.utilities.chemical_formulas import compute_mu
 from yt.utilities.file_handler import HDF5FileHandler
-from yt.utilities.physical_ratios import _primordial_mass_fraction
 
 from .fields import ParthenonFieldInfo
 
@@ -170,38 +169,24 @@ class ParthenonDataset(Dataset):
             storage_filename = self.basename + ".yt"
         self.storage_filename = storage_filename
 
-        # Read Parthenon Params into Params object
-        self.Params = dict(self._handle["Params"].attrs)
-
     def _set_code_unit_attributes(self):
         """
         Generates the conversion to various physical _units based on the
         parameter file
         """
-        # if "length_unit" not in self.units_override:
-        #    self.no_cgs_equiv_length = True
         for unit, cgs in [
             ("length", "cm"),
             ("time", "s"),
             ("mass", "g"),
-            ("temperature", "K"),
         ]:
-            attr_name = f"code_{unit}_cgs"
+            unit_param = f"Hydro/code_{unit}_cgs"
             # We set these to cgs for now, but they may have been overridden
-            unit_attrs = {
-                key: val
-                for key, val in self._handle["Params"].attrs.items()
-                if key.endswith(attr_name)
-            }
-
             if getattr(self, unit + "_unit", None) is not None:
                 continue
-            elif len(unit_attrs) >= 1:
-                setattr(
-                    self, f"{unit}_unit", self.quan(list(unit_attrs.values())[0], cgs)
-                )
+            elif unit_param in self.params:
+                setattr(self, f"{unit}_unit", self.quan(self.params[unit_param], cgs))
             else:
-                mylog.warning("Assuming 1.0 = 1.0 %s", cgs)
+                mylog.warning(f"Assuming 1.0 = 1.0 {cgs}")
                 setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
 
         self.magnetic_unit = np.sqrt(
@@ -213,6 +198,9 @@ class ParthenonDataset(Dataset):
         self.velocity_unit = self.length_unit / self.time_unit
 
     def _parse_parameter_file(self):
+        # Read Parthenon Params into Params object
+        self.params = dict(self._handle["Params"].attrs)
+
         xmin, xmax = self._handle["Info"].attrs["RootGridDomain"][0:2]
         ymin, ymax = self._handle["Info"].attrs["RootGridDomain"][3:5]
         zmin, zmax = self._handle["Info"].attrs["RootGridDomain"][6:8]
@@ -281,36 +269,30 @@ class ParthenonDataset(Dataset):
 
             self._periodicity = tuple(bc == "periodic" for bc in inner_bcs)
 
-        gamma_attrs = {
-            key: val
-            for key, val in self._handle["Params"].attrs.items()
-            if key.endswith("AdiabaticIndex")
-        }
         if "gamma" in self.specified_parameters:
             self.gamma = float(self.specified_parameters["gamma"])
-        elif len(gamma_attrs) >= 1:
-            self.gamma = next(iter(gamma_attrs.values()))
+        elif "Hydro/AdiabaticIndex" in self.params:
+            self.gamma = self.params["Hydro/AdiabaticIndex"]
         else:
+            mylog.warning(
+                "Adiabatic index gamma could not be determined. Falling back to 5/3."
+            )
             self.gamma = 5.0 / 3.0
 
-        He_mass_fraction_attrs = {
-            key: val
-            for key, val in self._handle["Params"].attrs.items()
-            if key.endswith("He_mass_fraction")
-        }
-        if len(He_mass_fraction_attrs) >= 1:
-            He_mass_fraction = next(iter(He_mass_fraction_attrs.values()))
-            H_mass_fraction = 1.0 - self.He_mass_fraction
+        if "Hydro/mu" in self.params:
+            self.mu = self.params["Hydro/mu"]
+        # Legacy He_mass_fraction parameter implemented in AthenaPK
+        elif "Hydro/He_mass_fraction" in self.params:
+            He_mass_fraction = self.params["Hydro/He_mass_fraction"]
             self.mu = 1 / (He_mass_fraction * 3.0 / 4.0 + (1 - He_mass_fraction) * 2)
+        # Fallback to primorial gas composition (and show warning)
         else:
-            He_mass_fraction = _primordial_mass_fraction["He"]
-            H_mass_fraction = _primordial_mass_fraction["H"]
+            mylog.warning(
+                "Plasma composition could not be determined in data file. Falling back to fully ionized primodial composition."
+            )
             self.mu = self.specified_parameters.get(
                 "mu", compute_mu(self.default_species_fields)
             )
-
-        self.parameters["He_mass_fraction"] = He_mass_fraction
-        self.parameters["H_mass_fraction"] = H_mass_fraction
 
         # no support for cosmological sims in AthenaPK/Parthenon yet
         self.current_redshift = 0.0
@@ -325,10 +307,6 @@ class ParthenonDataset(Dataset):
         ] = 0  # Hardcode for now until field staggering is supported.
 
         self.parameters["Gamma"] = self.gamma
-
-        self.mu = self.specified_parameters.get(
-            "mu", compute_mu(self.default_species_fields)
-        )
 
     @classmethod
     def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
