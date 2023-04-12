@@ -143,7 +143,6 @@ class ParthenonDataset(Dataset):
         self.fluid_types += ("parthenon",)
         if parameters is None:
             parameters = {}
-        self.specified_parameters = parameters
         if units_override is None:
             units_override = {}
         self._handle = HDF5FileHandler(filename)
@@ -263,8 +262,8 @@ class ParthenonDataset(Dataset):
         self.field_ordering = "fortran"
         self.boundary_conditions = [1] * 6
 
-        if "periodicity" in self.specified_parameters:
-            self._periodicity = tuple(self.specified_parameters["periodicity"])
+        if "periodicity" in self.parameters:
+            self._periodicity = tuple(self.parameters["periodicity"])
         else:
             boundary_conditions = self._handle["Info"].attrs["BoundaryConditions"]
 
@@ -277,8 +276,8 @@ class ParthenonDataset(Dataset):
 
             self._periodicity = tuple(bc == "periodic" for bc in inner_bcs)
 
-        if "gamma" in self.specified_parameters:
-            self.gamma = float(self.specified_parameters["gamma"])
+        if "gamma" in self.parameters:
+            self.gamma = float(self.parameters["gamma"])
         elif "Hydro/AdiabaticIndex" in self.parameters:
             self.gamma = self.parameters["Hydro/AdiabaticIndex"]
         else:
@@ -298,9 +297,7 @@ class ParthenonDataset(Dataset):
             mylog.warning(
                 "Plasma composition could not be determined in data file. Falling back to fully ionized primodial composition."
             )
-            self.mu = self.specified_parameters.get(
-                "mu", compute_mu(self.default_species_fields)
-            )
+            self.mu = self.parameters.get("mu", compute_mu(self.default_species_fields))
 
         # no support for cosmological sims in AthenaPK/Parthenon yet
         self.current_redshift = 0.0

@@ -2,7 +2,7 @@ import numpy as np
 
 from yt._typing import KnownFieldsT
 from yt.fields.field_info_container import FieldInfoContainer
-from yt.utilities.physical_constants import amu, kboltz
+from yt.utilities.physical_constants import kboltz, mh
 
 mag_units = "code_magnetic"
 pres_units = "code_mass/(code_length*code_time**2)"
@@ -122,12 +122,11 @@ class ParthenonFieldInfo(FieldInfoContainer):
             )
 
         # Add temperature field
-        # TODO(discuss use of amu versus mh -- also in AthenaPK)
         def _temperature(field, data):
             return (
                 (data["gas", "pressure"] / data["gas", "density"])
                 * data.ds.mu
-                * amu
+                * mh
                 / kboltz
             )
 
@@ -142,21 +141,22 @@ class ParthenonFieldInfo(FieldInfoContainer):
             self, "parthenon", ["MagneticField%d" % ax for ax in (1, 2, 3)]
         )
 
-        if "cooling_table_filename" in self.ds.specified_parameters:
+        if (
+            "cooling_table_filename" in self.ds.parameters
+            and "He_mass_fraction" in self.ds.parameters
+        ):
             # A cooling table is provided - compute "Cooling_Rate" and "Cooling_Time"
 
-            cooling_table = np.loadtxt(
-                self.ds.specified_parameters["cooling_table_filename"]
-            )
+            cooling_table = np.loadtxt(self.ds.parameters["cooling_table_filename"])
             log_temps = cooling_table[
-                :, self.ds.specified_parameters["cooling_table_log_temp_col"]
+                :, self.ds.parameters["cooling_table_log_temp_col"]
             ]
             log_lambdas = cooling_table[
-                :, self.ds.specified_parameters["cooling_table_log_lambda_col"]
+                :, self.ds.parameters["cooling_table_log_lambda_col"]
             ]
 
             lambdas_units = self.ds.quan(
-                self.ds.specified_parameters["cooling_table_lambda_units_cgs"],
+                self.ds.parameters["cooling_table_lambda_units_cgs"],
                 "erg*cm**3/s",
             )
 
@@ -177,9 +177,11 @@ class ParthenonFieldInfo(FieldInfoContainer):
 
                 lambda_ = 10 ** (log_lambda) * lambdas_units
 
-                H_mass_fraction = data.ds.parameters["H_mass_fraction"]
+                # Currently assuming a fully ionized gas without metallicity.
+                # This needs to be updated when AthenaPK is updated to be more flexible.
+                H_mass_fraction = 1.0 - data.ds.parameters["He_mass_fraction"]
 
-                cr = lambda_ * (data["gas", "density"] * H_mass_fraction / amu) ** 2
+                cr = lambda_ * (data["gas", "density"] * H_mass_fraction / mh) ** 2
 
                 return cr
 
