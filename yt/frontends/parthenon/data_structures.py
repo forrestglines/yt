@@ -9,6 +9,7 @@ from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.data_objects.static_output import Dataset
 from yt.fields.magnetic_field import get_magnetic_normalization
 from yt.funcs import mylog
+from yt.geometry.geometry_enum import Geometry
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.utilities.chemical_formulas import compute_mu
 from yt.utilities.file_handler import HDF5FileHandler
@@ -16,7 +17,7 @@ from yt.utilities.file_handler import HDF5FileHandler
 from .fields import ParthenonFieldInfo
 
 geom_map = {
-    "UniformCartesian": "cartesian",
+    "UniformCartesian": Geometry.CARTESIAN,
 }
 
 _cis = np.fromiter(
