@@ -299,20 +299,6 @@ class ParthenonDataset(Dataset):
             )
             self.mu = self.parameters.get("mu", compute_mu(self.default_species_fields))
 
-        # no support for cosmological sims in AthenaPK/Parthenon yet
-        self.current_redshift = 0.0
-        self.omega_lambda = 0.0
-        self.omega_matter = 0.0
-        self.hubble_constant = 0.0
-        self.cosmological_simulation = 0
-
-        self.parameters["Time"] = self.current_time  # Hardcode time conversion for now.
-        self.parameters[
-            "HydroMethod"
-        ] = 0  # Hardcode for now until field staggering is supported.
-
-        self.parameters["Gamma"] = self.gamma
-
     @classmethod
     def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
         return filename.endswith((".phdf", ".rhdf"))
