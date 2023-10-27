@@ -1,7 +1,7 @@
-# distutils: include_dirs = LIB_DIR_EWAH
 # distutils: language = c++
 # distutils: extra_compile_args = CPP14_FLAG
-# distutils: libraries = STD_LIBS
+# distutils: include_dirs = LIB_DIR
+# distutils: libraries = EWAH_LIBS
 """
 Oct container tuned for Particles
 
@@ -10,17 +10,16 @@ Oct container tuned for Particles
 """
 
 
-from libc.math cimport ceil, log2
-from libc.stdlib cimport free, malloc
-from libcpp.map cimport map as cmap
-from libcpp.vector cimport vector
-
-from yt.utilities.lib.ewah_bool_array cimport (
+from ewah_bool_utils.ewah_bool_array cimport (
     bool_array,
     ewah_bool_array,
     ewah_bool_iterator,
     ewah_word_type,
 )
+from libc.math cimport ceil, log2
+from libc.stdlib cimport free, malloc
+from libcpp.map cimport map as cmap
+from libcpp.vector cimport vector
 
 import numpy as np
 
@@ -55,18 +54,20 @@ from .selection_routines cimport AlwaysSelector, SelectorObject
 
 from yt.funcs import get_pbar
 
-from ..utilities.lib.ewah_bool_wrap cimport BoolArrayCollection
+from ewah_bool_utils.ewah_bool_wrap cimport BoolArrayCollection
 
 import os
 
-
-_bitmask_version = np.uint64(5)
-
-from ..utilities.lib.ewah_bool_wrap cimport (
+from ewah_bool_utils.ewah_bool_wrap cimport (
     BoolArrayCollectionUncompressed as BoolArrayColl,
     FileBitmasks,
     SparseUnorderedRefinedBitmaskSet as SparseUnorderedRefinedBitmask,
 )
+
+
+_bitmask_version = np.uint64(5)
+
+
 
 ctypedef cmap[np.uint64_t, bool_array] CoarseRefinedSets
 
@@ -74,7 +75,6 @@ cdef class ParticleOctreeContainer(OctreeContainer):
     cdef Oct** oct_list
     #The starting oct index of each domain
     cdef np.int64_t *dom_offsets
-    cdef public int max_level
     #How many particles do we keep before refining
     cdef public int n_ref
 
@@ -483,9 +483,9 @@ cdef class ParticleBitmap:
         hash_data.extend(np.array(self.left_edge).tobytes())
         hash_data.extend(np.array(self.right_edge).tobytes())
         hash_data.extend(np.array(self.periodicity).tobytes())
-        hash_data.extend(self.nfiles.to_bytes(2, "little", signed=False))
-        hash_data.extend(self.index_order1.to_bytes(2, "little", signed=True))
-        hash_data.extend(self.index_order2.to_bytes(2, "little", signed=True))
+        hash_data.extend(self.nfiles.to_bytes(8, "little", signed=False))
+        hash_data.extend(self.index_order1.to_bytes(4, "little", signed=True))
+        hash_data.extend(self.index_order2.to_bytes(4, "little", signed=True))
         self.hash_value = fnv_hash(hash_data)
 
     def _bitmask_logicaland(self, ifile, bcoll, out):
@@ -994,7 +994,7 @@ cdef class ParticleBitmap:
     def iseq_bitmask(self, solf):
         return self.bitmasks._iseq(solf.get_bitmasks())
 
-    def save_bitmasks(self, fname):
+    def save_bitmasks(self, fname, max_hsml):
         import h5py
         cdef bytes serial_BAC
         cdef np.uint64_t ifile
@@ -1007,6 +1007,7 @@ cdef class ParticleBitmap:
 
             grp.attrs["bitmask_version"] = _bitmask_version
             grp.attrs["nfiles"] = self.nfiles
+            grp.attrs["max_hsml"] = max_hsml
             # Add some attrs for convenience. They're not read back.
             grp.attrs["file_hash"] = self.file_hash
             grp.attrs["left_edge"] = self.left_edge
@@ -1043,6 +1044,10 @@ cdef class ParticleBitmap:
                 raise OSError(f"Index not found in the {fname}")
 
             ver = grp.attrs["bitmask_version"]
+            try:
+                max_hsml = grp.attrs["max_hsml"]
+            except KeyError:
+                raise OSError(f"'max_hsml' not found in the {fname}")
             if ver == self.nfiles and ver != _bitmask_version:
                 overwrite = 1
                 ver = 0 # Original bitmaps had number of files first
@@ -1066,8 +1071,8 @@ cdef class ParticleBitmap:
 
         # Save in correct format
         if overwrite == 1:
-            self.save_bitmasks(fname)
-        return read_flag
+            self.save_bitmasks(fname, max_hsml)
+        return read_flag, max_hsml
 
     def print_info(self):
         cdef np.uint64_t ifile
@@ -1939,7 +1944,6 @@ cdef class ParticleBitmapSelector:
 
 cdef class ParticleBitmapOctreeContainer(SparseOctreeContainer):
     cdef Oct** oct_list
-    cdef public int max_level
     cdef public int n_ref
     cdef int loaded # Loaded with load_octree?
     cdef np.uint8_t* _ptr_index_base_roots

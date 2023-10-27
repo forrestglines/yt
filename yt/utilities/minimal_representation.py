@@ -1,7 +1,6 @@
 import abc
 import json
 import os
-from typing import Tuple
 from uuid import uuid4
 
 import numpy as np
@@ -85,7 +84,8 @@ class MinimalRepresentation(metaclass=abc.ABCMeta):
     def _generate_post(self):
         pass
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def _attr_list(self):
         pass
 
@@ -180,7 +180,7 @@ class MinimalDataset(MinimalRepresentation):
 
 
 class MinimalMappableData(MinimalRepresentation):
-    _attr_list: Tuple[str, ...] = (
+    _attr_list: tuple[str, ...] = (
         "field_data",
         "field",
         "weight_field",
@@ -248,7 +248,7 @@ class MinimalImageCollectionData(MinimalRepresentation):
     def _generate_post(self):
         nobj = self._return_filtered_object(("images",))
         metadata = nobj._attrs
-        chunks = [(fn, d) for fn, d in self.images]
+        chunks = list(self.images)
         return (metadata, ("images", chunks))
 
 

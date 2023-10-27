@@ -1,10 +1,9 @@
 import numpy as np
+from numpy.testing import assert_allclose, assert_equal
 
 from yt.frontends.parthenon.api import ParthenonDataset
 from yt.loaders import load
 from yt.testing import (
-    assert_allclose,
-    assert_equal,
     assert_true,
     requires_file,
     units_override_check,

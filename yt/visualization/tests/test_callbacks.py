@@ -141,7 +141,6 @@ def test_timestamp_callback():
     with _cleanup_fname() as prefix:
         ds = fake_amr_ds(fields=("density",), units=("g/cm**3",), geometry="spherical")
         p = ProjectionPlot(ds, "r", ("gas", "density"))
-        assert_raises(YTDataTypeUnsupported, p.annotate_timestamp, coord_system="data")
         p.annotate_timestamp(coord_system="axis")
         assert_fname(p.save(prefix)[0])
 
@@ -403,6 +402,23 @@ def test_sphere_callback():
         )
         p.annotate_sphere([0.5, 0.5], 0.1, coord_system="axis", text="blah")
         assert_fname(p.save(prefix)[0])
+
+
+def test_invalidated_annotations():
+    # check that annotate_sphere and annotate_arrow succeed on re-running after
+    # an operation that invalidates the plot (set_font_size), see
+    # https://github.com/yt-project/yt/issues/4698
+
+    ds = fake_amr_ds(fields=("density",), units=("g/cm**3",))
+    p = SlicePlot(ds, "z", ("gas", "density"))
+    p.annotate_sphere([0.5, 0.5, 0.5], 0.1)
+    p.set_font_size(24)
+    p.render()
+
+    p = SlicePlot(ds, "z", ("gas", "density"))
+    p.annotate_arrow([0.5, 0.5, 0.5])
+    p.set_font_size(24)
+    p.render()
 
 
 def test_text_callback():
@@ -755,15 +771,15 @@ def test_contour_callback():
             geometry="spherical",
         )
         p = SlicePlot(ds, "r", ("gas", "density"))
-        kwargs = dict(
-            levels=10,
-            factor=8,
-            take_log=False,
-            clim=(0.4, 0.6),
-            plot_args={"linewidths": 2.0},
-            label=True,
-            text_args={"fontsize": "x-large"},
-        )
+        kwargs = {
+            "levels": 10,
+            "factor": 8,
+            "take_log": False,
+            "clim": (0.4, 0.6),
+            "plot_args": {"linewidths": 2.0},
+            "label": True,
+            "text_args": {"fontsize": "x-large"},
+        }
         assert_raises(
             YTDataTypeUnsupported, p.annotate_contour, ("gas", "temperature"), **kwargs
         )
@@ -811,17 +827,17 @@ def test_grids_callback():
     with _cleanup_fname() as prefix:
         ds = fake_amr_ds(fields=("density",), units=("g/cm**3",), geometry="spherical")
         p = SlicePlot(ds, "r", ("gas", "density"))
-        kwargs = dict(
-            alpha=0.7,
-            min_pix=10,
-            min_pix_ids=30,
-            draw_ids=True,
-            id_loc="upper right",
-            periodic=False,
-            min_level=2,
-            max_level=3,
-            cmap="gist_stern",
-        )
+        kwargs = {
+            "alpha": 0.7,
+            "min_pix": 10,
+            "min_pix_ids": 30,
+            "draw_ids": True,
+            "id_loc": "upper right",
+            "periodic": False,
+            "min_level": 2,
+            "max_level": 3,
+            "cmap": "gist_stern",
+        }
         assert_raises(YTDataTypeUnsupported, p.annotate_grids, **kwargs)
 
 
@@ -914,17 +930,20 @@ def test_streamline_callback():
             p.annotate_streamlines(
                 ("gas", "velocity_x"),
                 ("gas", "velocity_y"),
-                field_color=("stream", "magvel"),
+                color=("stream", "magvel"),
             )
             assert_fname(p.save(prefix)[0])
             check_axis_manipulation(p, prefix)
 
+            # a more thorough example involving many keyword arguments
             p = SlicePlot(ds, ax, ("gas", "density"))
             p.annotate_streamlines(
                 ("gas", "velocity_x"),
                 ("gas", "velocity_y"),
-                field_color=("stream", "magvel"),
-                display_threshold=0.5,
+                linewidth=("gas", "density"),
+                linewidth_upscaling=3,
+                color=("stream", "magvel"),
+                color_threshold=0.5,
                 cmap="viridis",
                 arrowstyle="->",
             )

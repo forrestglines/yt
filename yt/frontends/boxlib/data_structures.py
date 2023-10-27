@@ -4,7 +4,6 @@ import re
 from collections import namedtuple
 from functools import cached_property
 from stat import ST_CTIME
-from typing import Type
 
 import numpy as np
 
@@ -563,7 +562,7 @@ class BoxlibHierarchy(GridIndex):
         self.field_indexes = {f[1]: i for i, f in enumerate(self.field_list)}
         # There are times when field_list may change.  We copy it here to
         # avoid that possibility.
-        self.field_order = [f for f in self.field_list]
+        self.field_order = list(self.field_list)
 
     def _setup_data_io(self):
         self.io = io_registry[self.dataset_type](self.dataset)
@@ -623,7 +622,7 @@ class BoxlibDataset(Dataset):
     """
 
     _index_class = BoxlibHierarchy
-    _field_info_class: Type[FieldInfoContainer] = BoxlibFieldInfo
+    _field_info_class: type[FieldInfoContainer] = BoxlibFieldInfo
     _output_prefix = None
     _default_cparam_filename = "job_info"
 
@@ -922,6 +921,31 @@ class BoxlibDataset(Dataset):
         return self.refine_by ** (l1 - l0 + offset)
 
 
+class AMReXHierarchy(BoxlibHierarchy):
+    def __init__(self, ds, dataset_type="boxlib_native"):
+        super().__init__(ds, dataset_type)
+
+        if "particles" in self.ds.parameters:
+            is_checkpoint = True
+            for ptype in self.ds.particle_types:
+                self._read_particles(ptype, is_checkpoint)
+
+
+class AMReXDataset(BoxlibDataset):
+    _index_class: type[BoxlibHierarchy] = AMReXHierarchy
+    _subtype_keyword = "amrex"
+    _default_cparam_filename = "job_info"
+
+    def _parse_parameter_file(self):
+        super()._parse_parameter_file()
+        particle_types = glob.glob(os.path.join(self.output_dir, "*", "Header"))
+        particle_types = [cpt.split(os.sep)[-2] for cpt in particle_types]
+        if len(particle_types) > 0:
+            self.parameters["particles"] = 1
+            self.particle_types = tuple(particle_types)
+            self.particle_types_raw = self.particle_types
+
+
 class OrionHierarchy(BoxlibHierarchy):
     def __init__(self, ds, dataset_type="orion_native"):
         BoxlibHierarchy.__init__(self, ds, dataset_type)
@@ -934,7 +958,7 @@ class OrionHierarchy(BoxlibHierarchy):
         self.field_indexes = {f[1]: i for i, f in enumerate(self.field_list)}
         # There are times when field_list may change.  We copy it here to
         # avoid that possibility.
-        self.field_order = [f for f in self.field_list]
+        self.field_order = list(self.field_list)
 
         # look for particle fields
         self.particle_filename = None
@@ -1058,7 +1082,7 @@ class CastroHierarchy(BoxlibHierarchy):
             )
 
 
-class CastroDataset(BoxlibDataset):
+class CastroDataset(AMReXDataset):
     _index_class = CastroHierarchy
     _field_info_class = CastroFieldInfo
     _subtype_keyword = "castro"
@@ -1137,7 +1161,8 @@ class CastroDataset(BoxlibDataset):
             self.particle_types_raw = self.particle_types
 
 
-class MaestroDataset(BoxlibDataset):
+class MaestroDataset(AMReXDataset):
+    _index_class = BoxlibHierarchy
     _field_info_class = MaestroFieldInfo
     _subtype_keyword = "maestro"
     _default_cparam_filename = "job_info"
@@ -1577,50 +1602,3 @@ class WarpXDataset(BoxlibDataset):
         setdefaultattr(self, "time_unit", self.quan(1.0, "s"))
         setdefaultattr(self, "velocity_unit", self.quan(1.0, "m/s"))
         setdefaultattr(self, "magnetic_unit", self.quan(1.0, "T"))
-
-
-class AMReXHierarchy(BoxlibHierarchy):
-    def __init__(self, ds, dataset_type="boxlib_native"):
-        super().__init__(ds, dataset_type)
-
-        if "particles" in self.ds.parameters:
-            is_checkpoint = True
-            for ptype in self.ds.particle_types:
-                self._read_particles(ptype, is_checkpoint)
-
-
-class AMReXDataset(BoxlibDataset):
-    _index_class = AMReXHierarchy
-    _subtype_keyword = "amrex"
-    _default_cparam_filename = "job_info"
-
-    def __init__(
-        self,
-        output_dir,
-        cparam_filename=None,
-        fparam_filename=None,
-        dataset_type="boxlib_native",
-        storage_filename=None,
-        units_override=None,
-        unit_system="cgs",
-        default_species_fields=None,
-    ):
-        super().__init__(
-            output_dir,
-            cparam_filename,
-            fparam_filename,
-            dataset_type,
-            storage_filename,
-            units_override,
-            unit_system,
-            default_species_fields=default_species_fields,
-        )
-
-    def _parse_parameter_file(self):
-        super()._parse_parameter_file()
-        particle_types = glob.glob(os.path.join(self.output_dir, "*", "Header"))
-        particle_types = [cpt.split(os.sep)[-2] for cpt in particle_types]
-        if len(particle_types) > 0:
-            self.parameters["particles"] = 1
-            self.particle_types = tuple(particle_types)
-            self.particle_types_raw = self.particle_types

@@ -1,15 +1,10 @@
 import numpy as np
 import pytest
 import unyt
+from numpy.testing import assert_almost_equal, assert_equal
 
 from yt import load_amr_grids, load_hdf5_file, load_uniform_grid
-from yt.testing import (
-    _amr_grid_index,
-    assert_almost_equal,
-    assert_equal,
-    requires_file,
-    requires_module,
-)
+from yt.testing import _amr_grid_index, requires_file, requires_module
 
 turb_vels = "UnigridData/turb_vels.h5"
 
@@ -46,6 +41,13 @@ def test_load_hdf5_file():
     assert_almost_equal(ds2.r[:]["Density"].min(), ds1.r[:]["Density"].min())
     assert_almost_equal(ds2.r[:]["Density"].max(), ds1.r[:]["Density"].max())
     assert_almost_equal(ds2.r[:]["Density"].std(), ds1.r[:]["Density"].std())
+    # test that we can load this dataset with a different bounding box and length units
+    ds3 = load_hdf5_file(
+        turb_vels,
+        bbox=np.array([[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0]]),
+        dataset_arguments={"length_unit": (1.0, "kpc")},
+    )
+    assert_almost_equal(ds3.domain_width, ds3.arr([2, 2, 2], "kpc"))
 
 
 _x_coefficients = (100, 50, 30, 10, 20)

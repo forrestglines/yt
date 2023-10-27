@@ -3,7 +3,7 @@ import weakref
 from collections import defaultdict
 from itertools import product
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -109,7 +109,7 @@ class RAMSESFileSanitizer:
     @staticmethod
     def _match_output_and_group(
         path: Path,
-    ) -> Tuple[Path, Optional[Path], Optional[str]]:
+    ) -> tuple[Path, Optional[Path], Optional[str]]:
         # Make sure we work with a directory of the form `output_XXXXX`
         for p in (path, path.parent):
             match = OUTPUT_DIR_RE.match(p.name)
@@ -133,7 +133,7 @@ class RAMSESFileSanitizer:
     @classmethod
     def test_with_folder_name(
         cls, output_dir: Path
-    ) -> Tuple[bool, Optional[Path], Optional[Path], Optional[Path]]:
+    ) -> tuple[bool, Optional[Path], Optional[Path], Optional[Path]]:
         output_dir, group_dir, iout = cls._match_output_and_group(output_dir)
         ok = output_dir.is_dir() and iout is not None
 
@@ -151,7 +151,7 @@ class RAMSESFileSanitizer:
     @classmethod
     def test_with_standard_file(
         cls, filename: Path
-    ) -> Tuple[bool, Optional[Path], Optional[Path], Optional[Path]]:
+    ) -> tuple[bool, Optional[Path], Optional[Path], Optional[Path]]:
         output_dir, group_dir, iout = cls._match_output_and_group(filename.parent)
         ok = (
             filename.is_file()
@@ -625,7 +625,7 @@ class RAMSESIndex(OctreeIndex):
         desc = {"names": ["numcells", "level"], "formats": ["int64"] * 2}
         max_level = self.dataset.min_level + self.dataset.max_level + 2
         self.level_stats = blankRecordArray(desc, max_level)
-        self.level_stats["level"] = [i for i in range(max_level)]
+        self.level_stats["level"] = list(range(max_level))
         self.level_stats["numcells"] = [0 for i in range(max_level)]
         for level in range(self.dataset.min_level + 1):
             self.level_stats[level + 1]["numcells"] = 2 ** (
@@ -681,8 +681,7 @@ class RAMSESIndex(OctreeIndex):
         except Exception:
             pass
         print(
-            "t = %0.8e = %0.8e s = %0.8e years"
-            % (
+            "t = {:0.8e} = {:0.8e} = {:0.8e}".format(
                 self.ds.current_time.in_units("code_time"),
                 self.ds.current_time.in_units("s"),
                 self.ds.current_time.in_units("yr"),
@@ -690,7 +689,7 @@ class RAMSESIndex(OctreeIndex):
         )
         print("\nSmallest Cell:")
         for item in ("Mpc", "pc", "AU", "cm"):
-            print(f"\tWidth: {dx.in_units(item):0.3e} {item}")
+            print(f"\tWidth: {dx.in_units(item):0.3e}")
 
 
 class RAMSESDataset(Dataset):
@@ -743,7 +742,7 @@ class RAMSESDataset(Dataset):
 
         file_handler = RAMSESFileSanitizer(filename)
 
-        # ensure validation happens even if the class is instanciated
+        # ensure validation happens even if the class is instantiated
         # directly rather than from yt.load
         file_handler.validate()
 
@@ -1037,5 +1036,8 @@ class RAMSESDataset(Dataset):
             self.parameters["namelist"] = nml
 
     @classmethod
-    def _is_valid(cls, filename, *args, **kwargs):
+    def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
+        if cls._missing_load_requirements():
+            return False
+
         return RAMSESFileSanitizer(filename).is_valid

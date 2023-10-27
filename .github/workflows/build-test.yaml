@@ -33,7 +33,7 @@ jobs:
         test-runner: [pytest]
         include:
           - os: ubuntu-latest
-            python-version: '3.8'
+            python-version: '3.9'
             dependencies: minimal
             tests-type: unit
             test-runner: pytest
@@ -53,8 +53,22 @@ jobs:
             dependencies: full
             tests-type: answer
             test-runner: nose
+          - os: ubuntu-latest
+            # minimal tests with Python 3.12 and no optional dependencies
+            # TODO: when all optional dependencies are compatibles,
+            # remove this and bump 3.11 -> 3.12 on all arch with 'full' dependencies
+            # see https://github.com/yt-project/yt/issues/4689
+            python-version: '3.12'
+            dependencies: ''
+            tests-type: unit
+            test-runner: pytest
 
     runs-on: ${{ matrix.os }}
+
+    concurrency:
+      # auto-cancel any in-progress job *on the same branch*
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.tests-type }}-py${{ matrix.python-version }}-${{ matrix.os }}-${{ matrix.test-runner }}
+      cancel-in-progress: true
 
     steps:
     - name: Set up Python
@@ -63,32 +77,83 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Checkout repo (bare)
       if: matrix.tests-type != 'answer'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Checkout repo (with submodules)
       if: matrix.tests-type == 'answer'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: true
-    - name: Set up Conda (windows only)
-      uses: s-weigand/setup-conda@v1
-      if: matrix.os == 'windows-latest'
-      with:
-        update-conda: true
-        conda-channels: conda-forge
-        activate-conda: true
-        python-version: ${{matrix.python-version}}
     - name: Install dependencies and yt
       shell: bash
       env:
         dependencies: ${{ matrix.dependencies }}
       run: source ./tests/ci_install.sh
-    - name: Run Tests (pytest)
+
+    - run: python -m pip list
+    - name: Run Unit Tests (pytest)
       if: matrix.test-runner == 'pytest'
       run: pytest --color=yes
     - name: Run Tests (nose)
       if: matrix.test-runner == 'nose'
       run: cat nose_ignores.txt | xargs python -m nose -c nose_unit.cfg --traverse-namespace
-    - name: Report Failed Answers
-      if: ${{ matrix.tests-type == 'answer' && failure() }}
+
+  image-tests:
+    name: Image tests
+    runs-on: ubuntu-latest
+
+    concurrency:
+      # auto-cancel any in-progress job *on the same branch*
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Checkout repo (with submodules)
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Install dependencies and yt
       shell: bash
-      run: python tests/report_failed_answers.py -f -m --xunit-file answer_nosetests.xml
+      env:
+        dependencies: 'cartopy'
+      run: |
+        source ./tests/ci_install.sh
+
+    - run: python -m pip list
+
+    - name: Run Image Tests
+      run: |
+        pytest --color=yes --mpl -m mpl_image_compare \
+               --mpl-generate-summary=html \
+               --mpl-results-path=pytest_mpl_results \
+               --mpl-baseline-path=tests/pytest_mpl_baseline \
+               -rxXs # show extra info on xfailed, xpassed, and skipped tests
+
+    - name: Generate new image baseline
+      if: failure()
+      run: |
+        pytest --color=yes --mpl -m mpl_image_compare \
+               --mpl-generate-path=pytest_mpl_new_baseline \
+               --last-failed
+
+    # always attempt to upload artifacts, even
+    # (and especially) in case of failure.
+    - name: Upload pytest-mpl report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: yt_pytest_mpl_results
+        path: pytest_mpl_results/*
+
+    - name: Upload pytest-mpl baseline
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: yt_pytest_mpl_new_baseline
+        path: pytest_mpl_new_baseline/*
+        if-no-files-found: ignore

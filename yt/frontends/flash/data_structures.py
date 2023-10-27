@@ -1,17 +1,16 @@
 import os
 import weakref
-from typing import Type
 
 import numpy as np
 
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
-from yt.data_objects.static_output import Dataset, ParticleFile, validate_index_order
+from yt.data_objects.static_output import Dataset, ParticleFile
 from yt.funcs import mylog, setdefaultattr
 from yt.geometry.api import Geometry
 from yt.geometry.geometry_handler import Index
 from yt.geometry.grid_geometry_handler import GridIndex
 from yt.geometry.particle_geometry_handler import ParticleIndex
-from yt.utilities.file_handler import HDF5FileHandler, warn_h5py
+from yt.utilities.file_handler import HDF5FileHandler, valid_hdf5_signature
 from yt.utilities.physical_ratios import cm_per_mpc
 
 from .fields import FLASHFieldInfo
@@ -164,7 +163,8 @@ class FLASHHierarchy(GridIndex):
 
 
 class FLASHDataset(Dataset):
-    _index_class: Type[Index] = FLASHHierarchy
+    _load_requirements = ["h5py"]
+    _index_class: type[Index] = FLASHHierarchy
     _field_info_class = FLASHFieldInfo
     _handle = None
 
@@ -287,11 +287,11 @@ class FLASHDataset(Dataset):
 
     def _parse_parameter_file(self):
         if "file format version" in self._handle:
-            self._flash_version = int(self._handle["file format version"][:])
+            self._flash_version = self._handle["file format version"][:].item()
         elif "sim info" in self._handle:
-            self._flash_version = int(
-                self._handle["sim info"][:]["file format version"]
-            )
+            self._flash_version = self._handle["sim info"][:][
+                "file format version"
+            ].item()
         else:
             raise RuntimeError("Can't figure out FLASH file version.")
         # First we load all of the parameters
@@ -456,12 +456,15 @@ class FLASHDataset(Dataset):
             self.cosmological_simulation = 0
 
     @classmethod
-    def _is_valid(cls, filename, *args, **kwargs):
+    def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
+        if cls._missing_load_requirements():
+            return False
+
         try:
             fileh = HDF5FileHandler(filename)
             if "bounding box" in fileh["/"].keys():
                 return True
-        except (OSError, ImportError):
+        except OSError:
             pass
         return False
 
@@ -482,6 +485,7 @@ class FLASHParticleFile(ParticleFile):
 
 
 class FLASHParticleDataset(FLASHDataset):
+    _load_requirements = ["h5py"]
     _index_class = ParticleIndex
     filter_bbox = False
     _file_class = FLASHParticleFile
@@ -496,7 +500,7 @@ class FLASHParticleDataset(FLASHDataset):
         index_filename=None,
         unit_system="cgs",
     ):
-        self.index_order = validate_index_order(index_order)
+        self.index_order = index_order
         self.index_filename = index_filename
 
         if self._handle is not None:
@@ -523,8 +527,13 @@ class FLASHParticleDataset(FLASHDataset):
         self.file_count = 1
 
     @classmethod
-    def _is_valid(cls, filename, *args, **kwargs):
-        warn_h5py(filename)
+    def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
+        if not valid_hdf5_signature(filename):
+            return False
+
+        if cls._missing_load_requirements():
+            return False
+
         try:
             fileh = HDF5FileHandler(filename)
             if (
@@ -532,7 +541,7 @@ class FLASHParticleDataset(FLASHDataset):
                 and "localnp" in fileh["/"].keys()
             ):
                 return True
-        except (OSError, ImportError):
+        except OSError:
             pass
         return False
 

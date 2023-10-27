@@ -13,16 +13,15 @@ import subprocess
 import sys
 import time
 import traceback
-import urllib
 from collections import UserDict
+from collections.abc import Callable
 from copy import deepcopy
 from functools import lru_cache, wraps
 from numbers import Number as numeric_type
-from typing import Any, Callable, Optional, Type
+from typing import Any, Optional
 
 import numpy as np
 from more_itertools import always_iterable, collapse, first
-from packaging.version import Version
 
 from yt._maintenance.deprecation import issue_deprecation_warning
 from yt.config import ytcfg
@@ -30,11 +29,6 @@ from yt.units import YTArray, YTQuantity
 from yt.utilities.exceptions import YTFieldNotFound, YTInvalidWidthError
 from yt.utilities.logger import ytLogger as mylog
 from yt.utilities.on_demand_imports import _requests as requests
-
-if sys.version_info >= (3, 9):
-    import importlib.resources as importlib_resources
-else:
-    import importlib_resources
 
 # Some functions for handling sequences and other types
 
@@ -290,7 +284,7 @@ def insert_ipython(num_up=1):
     frame = inspect.stack()[num_up]
     loc = frame[0].f_locals.copy()
     glo = frame[0].f_globals
-    dd = dict(fname=frame[3], filename=frame[1], lineno=frame[2])
+    dd = {"fname": frame[3], "filename": frame[1], "lineno": frame[2]}
     cfg = Config()
     cfg.InteractiveShellEmbed.local_ns = loc
     cfg.InteractiveShellEmbed.global_ns = glo
@@ -553,6 +547,8 @@ def get_git_version(path):
 
 
 def get_yt_version():
+    import importlib.resources as importlib_resources
+
     version = get_git_version(os.path.dirname(importlib_resources.files("yt")))
     if version is None:
         return version
@@ -566,8 +562,10 @@ def get_yt_version():
 def get_version_stack():
     import matplotlib
 
+    from yt._version import __version__ as yt_version
+
     version_info = {}
-    version_info["yt"] = get_yt_version()
+    version_info["yt"] = yt_version
     version_info["numpy"] = np.version.version
     version_info["matplotlib"] = matplotlib.__version__
     return version_info
@@ -620,11 +618,12 @@ def fancy_download_file(url, filename, requests=None):
 
 
 def simple_download_file(url, filename):
+    import urllib.request
+
     class MyURLopener(urllib.request.FancyURLopener):
         def http_error_default(self, url, fp, errcode, errmsg, headers):
             raise RuntimeError(
-                "Attempt to download file from %s failed with error %s: %s."
-                % (url, errcode, errmsg)
+                f"Attempt to download file from {url} failed with error {errcode}: {errmsg}."
             )
 
     fn, h = MyURLopener().retrieve(url, filename)
@@ -634,6 +633,8 @@ def simple_download_file(url, filename):
 # This code snippet is modified from Georg Brandl
 def bb_apicall(endpoint, data, use_pass=True):
     import getpass
+    import urllib.parse
+    import urllib.request
 
     uri = f"https://api.bitbucket.org/1.0/{endpoint}/"
     # since bitbucket doesn't return the required WWW-Authenticate header when
@@ -1003,11 +1004,12 @@ def matplotlib_style_context(style="yt.default", after_reset=False):
     """
     # FUTURE: this function should be deprecated in favour of matplotlib.style.context
     # after support for matplotlib 3.6 and older versions is dropped.
+    import importlib.resources as importlib_resources
+
+    import matplotlib as mpl
     import matplotlib.style
 
-    from yt.visualization._commons import MPL_VERSION
-
-    if style == "yt.default" and MPL_VERSION < Version("3.7"):
+    if style == "yt.default" and mpl.__version_info__ < (3, 7):
         style = importlib_resources.files("yt") / "default.mplstyle"
 
     return matplotlib.style.context(style, after_reset=after_reset)
@@ -1179,15 +1181,16 @@ def is_valid_field_key(key):
 def validate_object(obj, data_type):
     if obj is not None and not isinstance(obj, data_type):
         raise TypeError(
-            "Expected an object of '%s' type, received '%s'"
-            % (str(data_type).split("'")[1], str(type(obj)).split("'")[1])
+            "Expected an object of '{}' type, received '{}'".format(
+                str(data_type).split("'")[1], str(type(obj)).split("'")[1]
+            )
         )
 
 
 def validate_axis(ds, axis):
     if ds is not None:
         valid_axis = sorted(
-            list(ds.coordinates.axis_name.keys()), key=lambda k: str(k).swapcase()
+            ds.coordinates.axis_name.keys(), key=lambda k: str(k).swapcase()
         )
     else:
         valid_axis = [0, 1, 2, "x", "y", "z", "X", "Y", "Z"]
@@ -1321,9 +1324,8 @@ def parse_center_array(center, ds, axis: Optional[int] = None):
 
     # make sure the return value shares all
     # unit symbols with ds.unit_registry
-    center = ds.arr(center)
     # we rely on unyt to invalidate unit dimensionality here
-    center.convert_to_units("code_length")
+    center = ds.arr(center).in_units("code_length")
 
     if not ds._is_within_domain(center):
         mylog.warning(
@@ -1347,7 +1349,7 @@ def sglob(pattern):
     return sorted(glob.glob(pattern))
 
 
-def dictWithFactory(factory: Callable[[Any], Any]) -> Type:
+def dictWithFactory(factory: Callable[[Any], Any]) -> type:
     """
     Create a dictionary class with a default factory function.
     Contrary to `collections.defaultdict`, the factory takes
@@ -1367,6 +1369,7 @@ def dictWithFactory(factory: Callable[[Any], Any]) -> Type:
     issue_deprecation_warning(
         "yt.funcs.dictWithFactory will be removed in a future version of yt, please do not rely on it. "
         "If you need it, copy paste this function from yt's source code",
+        stacklevel=3,
         since="4.1",
     )
 
@@ -1448,3 +1451,24 @@ def validate_moment(moment, weight_field):
             "Weighted projections can only be made of averages "
             "(moment = 1) or standard deviations (moment = 2)!"
         )
+
+
+def setdefault_mpl_metadata(save_kwargs: dict[str, Any], name: str) -> None:
+    """
+    Set a default Software metadata entry for use with Matplotlib outputs.
+    """
+    _, ext = os.path.splitext(name.lower())
+    if ext in (".eps", ".ps", ".svg", ".pdf"):
+        key = "Creator"
+    elif ext == ".png":
+        key = "Software"
+    else:
+        return
+    default_software = (
+        "Matplotlib version{matplotlib}, https://matplotlib.org|NumPy-{numpy}|yt-{yt}"
+    ).format(**get_version_stack())
+
+    if "metadata" in save_kwargs:
+        save_kwargs["metadata"].setdefault(key, default_software)
+    else:
+        save_kwargs["metadata"] = {key: default_software}

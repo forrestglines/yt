@@ -13,14 +13,11 @@ from distutils.ccompiler import CCompiler, new_compiler
 from distutils.sysconfig import customize_compiler
 from subprocess import PIPE, Popen
 from sys import platform as _platform
+import ewah_bool_utils
 from setuptools.command.build_ext import build_ext as _build_ext
 from setuptools.command.sdist import sdist as _sdist
 from setuptools.errors import CompileError, LinkError
-
-if sys.version_info >= (3, 9):
-    import importlib.resources as importlib_resources
-else:
-    import importlib_resources
+import importlib.resources as importlib_resources
 
 log = logging.getLogger("setupext")
 
@@ -400,6 +397,18 @@ def create_build_ext(lib_exts, cythonize_aliases):
             import numpy
 
             self.include_dirs.append(numpy.get_include())
+            self.include_dirs.append(ewah_bool_utils.get_include())
+
+            define_macros = [
+                ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
+                # keep in sync with runtime requirements (pyproject.toml)
+                ("NPY_TARGET_VERSION", "NPY_1_19_API_VERSION"),
+            ]
+
+            if self.define is None:
+                self.define = define_macros
+            else:
+                self.define.extend(define_macros)
 
         def build_extensions(self):
             self.check_extensions_list(self.extensions)

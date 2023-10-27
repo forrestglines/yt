@@ -1,10 +1,16 @@
 import inspect
 from collections import Counter
-from functools import reduce
-from typing import List, Type
+from typing import TypeVar
+
+from more_itertools import flatten
+
+from yt.data_objects.static_output import Dataset
+from yt.utilities.object_registries import output_type_registry
+
+T = TypeVar("T")
 
 
-def find_lowest_subclasses(candidates: List[Type]) -> List[Type]:
+def find_lowest_subclasses(candidates: list[type[T]]) -> list[type[T]]:
     """
     This function takes a list of classes, and returns only the ones that are
     are not super classes of any others in the list. i.e. the ones that are at
@@ -22,21 +28,16 @@ def find_lowest_subclasses(candidates: List[Type]) -> List[Type]:
         A list of classes which are not super classes for any others in
         candidates.
     """
-
-    # If there is only one input, the input candidate is always the
-    # lowest class
-    if len(candidates) == 1:
-        return candidates
-    elif len(candidates) == 0:
-        return []
-
-    mros = [inspect.getmro(c) for c in candidates]
-
-    counters = [Counter(mro) for mro in mros]
-
-    if len(counters) == 0:
-        return []
-
-    count = reduce(lambda x, y: x + y, counters)
-
+    count = Counter(flatten(inspect.getmro(c) for c in candidates))
     return [x for x in candidates if count[x] == 1]
+
+
+def get_classes_with_missing_requirements() -> dict[type[Dataset], list[str]]:
+    # We need a function here rather than an global constant registry because:
+    # - computation should be delayed until needed so that the result is independent of import order
+    # - tests might (temporarily) mutate output_type_registry
+    return {
+        cls: missing
+        for cls in sorted(output_type_registry.values(), key=lambda c: c.__name__)
+        if (missing := cls._missing_load_requirements())
+    }

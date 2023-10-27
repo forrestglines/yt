@@ -1,14 +1,16 @@
 import numpy as np
-
-from yt import load
-from yt.frontends.stream.fields import StreamFieldInfo
-from yt.testing import (
-    assert_allclose_units,
+from numpy.testing import (
     assert_almost_equal,
     assert_array_almost_equal_nulp,
     assert_array_equal,
     assert_equal,
     assert_raises,
+)
+
+from yt import load
+from yt.frontends.stream.fields import StreamFieldInfo
+from yt.testing import (
+    assert_allclose_units,
     fake_amr_ds,
     fake_particle_ds,
     fake_random_ds,
@@ -25,20 +27,20 @@ from yt.utilities.exceptions import (
 
 
 def get_params(ds):
-    return dict(
-        axis=0,
-        center=YTArray((0.0, 0.0, 0.0), "cm", registry=ds.unit_registry),
-        bulk_velocity=YTArray((0.0, 0.0, 0.0), "cm/s", registry=ds.unit_registry),
-        bulk_magnetic_field=YTArray((0.0, 0.0, 0.0), "G", registry=ds.unit_registry),
-        normal=YTArray((0.0, 0.0, 1.0), "", registry=ds.unit_registry),
-        cp_x_vec=YTArray((1.0, 0.0, 0.0), "", registry=ds.unit_registry),
-        cp_y_vec=YTArray((0.0, 1.0, 0.0), "", registry=ds.unit_registry),
-        cp_z_vec=YTArray((0.0, 0.0, 1.0), "", registry=ds.unit_registry),
-        omega_baryon=0.04,
-        observer_redshift=0.0,
-        source_redshift=3.0,
-        virial_radius=YTQuantity(1.0, "cm"),
-    )
+    return {
+        "axis": 0,
+        "center": YTArray((0.0, 0.0, 0.0), "cm", registry=ds.unit_registry),
+        "bulk_velocity": YTArray((0.0, 0.0, 0.0), "cm/s", registry=ds.unit_registry),
+        "bulk_magnetic_field": YTArray((0.0, 0.0, 0.0), "G", registry=ds.unit_registry),
+        "normal": YTArray((0.0, 0.0, 1.0), "", registry=ds.unit_registry),
+        "cp_x_vec": YTArray((1.0, 0.0, 0.0), "", registry=ds.unit_registry),
+        "cp_y_vec": YTArray((0.0, 1.0, 0.0), "", registry=ds.unit_registry),
+        "cp_z_vec": YTArray((0.0, 0.0, 1.0), "", registry=ds.unit_registry),
+        "omega_baryon": 0.04,
+        "observer_redshift": 0.0,
+        "source_redshift": 3.0,
+        "virial_radius": YTQuantity(1.0, "cm"),
+    }
 
 
 _base_fields = (

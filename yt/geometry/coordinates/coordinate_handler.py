@@ -1,7 +1,8 @@
 import abc
 import weakref
+from functools import cached_property
 from numbers import Number
-from typing import Optional, Tuple
+from typing import Any, Literal, Optional, overload
 
 import numpy as np
 
@@ -35,7 +36,7 @@ def _get_vert_fields(axi, units="code_length"):
     return _vert
 
 
-def _setup_dummy_cartesian_coords_and_widths(registry, axes: Tuple[str]):
+def _setup_dummy_cartesian_coords_and_widths(registry, axes: tuple[str]):
     for ax in axes:
         registry.add_field(
             ("index", f"d{ax}"), sampling_type="cell", function=_unknown_coord
@@ -145,8 +146,51 @@ class CoordinateHandler(abc.ABC):
         # This should return field definitions for x, y, z, r, theta, phi
         pass
 
+    @overload
+    def pixelize(
+        self,
+        dimension,
+        data_source,
+        field,
+        bounds,
+        size,
+        antialias=True,
+        periodic=True,
+        *,
+        return_mask: Literal[False],
+    ) -> "np.ndarray[Any, np.dtype[np.float64]]":
+        ...
+
+    @overload
+    def pixelize(
+        self,
+        dimension,
+        data_source,
+        field,
+        bounds,
+        size,
+        antialias=True,
+        periodic=True,
+        *,
+        return_mask: Literal[True],
+    ) -> tuple[
+        "np.ndarray[Any, np.dtype[np.float64]]", "np.ndarray[Any, np.dtype[np.bool_]]"
+    ]:
+        ...
+
     @abc.abstractmethod
-    def pixelize(self, dimension, data_source, field, bounds, size, antialias=True):
+    def pixelize(
+        self,
+        dimension,
+        data_source,
+        field,
+        bounds,
+        size,
+        antialias=True,
+        periodic=True,
+        *,
+        return_mask=False,
+    ):
         # This should *actually* be a pixelize call, not just returning the
         # pixelizer
         pass
@@ -184,98 +228,57 @@ class CoordinateHandler(abc.ABC):
     def convert_from_spherical(self, coord):
         pass
 
-    _data_projection = None
-
-    @property
+    @cached_property
     def data_projection(self):
-        if self._data_projection is not None:
-            return self._data_projection
-        dpj = {}
-        for ax in self.axis_order:
-            dpj[ax] = None
-        self._data_projection = dpj
-        return dpj
+        return {ax: None for ax in self.axis_order}
 
-    _data_transform = None
-
-    @property
+    @cached_property
     def data_transform(self):
-        if self._data_transform is not None:
-            return self._data_transform
-        dtx = {}
-        for ax in self.axis_order:
-            dtx[ax] = None
-        self._data_transform = dtx
-        return dtx
+        return {ax: None for ax in self.axis_order}
 
-    _axis_name = None
-
-    @property
+    @cached_property
     def axis_name(self):
-        if self._axis_name is not None:
-            return self._axis_name
         an = {}
         for axi, ax in enumerate(self.axis_order):
             an[axi] = ax
             an[ax] = ax
             an[ax.capitalize()] = ax
-        self._axis_name = an
         return an
 
-    _axis_id = None
-
-    @property
+    @cached_property
     def axis_id(self):
-        if self._axis_id is not None:
-            return self._axis_id
         ai = {}
         for axi, ax in enumerate(self.axis_order):
             ai[ax] = ai[axi] = axi
-        self._axis_id = ai
         return ai
-
-    _image_axis_name = None
 
     @property
     def image_axis_name(self):
-        # Default
-        if self._image_axis_name is not None:
-            return self._image_axis_name
-        self._image_axis_name = rv = {}
+        rv = {}
         for i in range(3):
             rv[i] = (self.axis_name[self.x_axis[i]], self.axis_name[self.y_axis[i]])
             rv[self.axis_name[i]] = rv[i]
             rv[self.axis_name[i].capitalize()] = rv[i]
         return rv
 
-    _x_axis = None
-
-    @property
+    @cached_property
     def x_axis(self):
-        if self._x_axis is not None:
-            return self._x_axis
         ai = self.axis_id
         xa = {}
         for a1, a2 in self._x_pairs:
             xa[a1] = xa[ai[a1]] = ai[a2]
-        self._x_axis = xa
         return xa
 
-    _y_axis = None
-
-    @property
+    @cached_property
     def y_axis(self):
-        if self._y_axis is not None:
-            return self._y_axis
         ai = self.axis_id
         ya = {}
         for a1, a2 in self._y_pairs:
             ya[a1] = ya[ai[a1]] = ai[a2]
-        self._y_axis = ya
         return ya
 
     @property
-    @abc.abstractproperty
+    @abc.abstractmethod
     def period(self):
         pass
 
@@ -353,7 +356,7 @@ def cylindrical_to_cartesian(coord, center=(0, 0, 0)):
     return c2
 
 
-def _get_polar_bounds(self: CoordinateHandler, axes: Tuple[str, str]):
+def _get_polar_bounds(self: CoordinateHandler, axes: tuple[str, str]):
     # a small helper function that is needed by two unrelated classes
     ri = self.axis_id[axes[0]]
     pi = self.axis_id[axes[1]]

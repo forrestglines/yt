@@ -1,6 +1,7 @@
 import numpy as np
+from numpy.testing import assert_almost_equal
 
-from yt.testing import assert_almost_equal, fake_sph_orientation_ds, requires_module
+from yt.testing import fake_sph_orientation_ds, requires_module
 from yt.utilities.lib.pixelization_routines import pixelize_sph_kernel_projection
 from yt.utilities.on_demand_imports import _scipy
 from yt.visualization.volume_rendering import off_axis_projection as OffAP
@@ -32,11 +33,12 @@ def test_no_rotation():
     bounds = [-4, 4, -4, 4, -4, 4]
 
     buf2 = np.zeros(resolution)
+    mask = np.ones_like(buf2, dtype="uint8")
     buf1 = OffAP.off_axis_projection(
         ds, center, normal_vector, width, resolution, ("gas", "density")
     )
     pixelize_sph_kernel_projection(
-        buf2, px, py, hsml, mass, density, quantity_to_smooth, bounds
+        buf2, mask, px, py, hsml, mass, density, quantity_to_smooth, bounds
     )
     assert_almost_equal(buf1.ndarray_view(), buf2)
 

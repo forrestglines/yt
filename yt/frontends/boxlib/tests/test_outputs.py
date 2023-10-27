@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.testing import assert_allclose, assert_equal
 
 from yt.frontends.boxlib.api import (
     AMReXDataset,
@@ -10,8 +11,6 @@ from yt.frontends.boxlib.api import (
 )
 from yt.loaders import load
 from yt.testing import (
-    assert_allclose,
-    assert_equal,
     disable_dataset_cache,
     requires_file,
     units_override_check,
@@ -420,22 +419,22 @@ def test_maestro_parameters():
 
     # Check a string parameter
     assert ds.parameters["plot_base_name"] == "subCh_hot_baserun_plt"
-    assert type(ds.parameters["plot_base_name"]) is str
+    assert type(ds.parameters["plot_base_name"]) is str  # noqa: E721
 
     # Check boolean parameters: T or F
     assert not ds.parameters["use_thermal_diffusion"]
-    assert type(ds.parameters["use_thermal_diffusion"]) is bool
+    assert type(ds.parameters["use_thermal_diffusion"]) is bool  # noqa: E721
 
     assert ds.parameters["do_burning"]
-    assert type(ds.parameters["do_burning"]) is bool
+    assert type(ds.parameters["do_burning"]) is bool  # noqa: E721
 
     # Check a float parameter with a decimal point
     assert ds.parameters["sponge_kappa"] == float("10.00000000")
-    assert type(ds.parameters["sponge_kappa"]) is float
+    assert type(ds.parameters["sponge_kappa"]) is float  # noqa: E721
 
     # Check a float parameter with E exponent notation
     assert ds.parameters["small_dt"] == float("0.1000000000E-09")
 
     # Check an int parameter
     assert ds.parameters["s0_interp_type"] == 3
-    assert type(ds.parameters["s0_interp_type"]) is int
+    assert type(ds.parameters["s0_interp_type"]) is int  # noqa: E721

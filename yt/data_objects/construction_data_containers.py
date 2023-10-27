@@ -153,7 +153,7 @@ class YTStreamline(YTSelectionContainer1D):
         for mi, (i, pos) in enumerate(zip(pids, self.positions[points_in_grid])):
             if not points_in_grid[i]:
                 continue
-            ci = ((pos - grid.LeftEdge) / grid.dds).astype("int")
+            ci = ((pos - grid.LeftEdge) / grid.dds).astype("int64")
             if grid.child_mask[ci[0], ci[1], ci[2]] == 0:
                 continue
             for j in range(3):
@@ -950,6 +950,40 @@ class YTCoveringGrid(YTSelectionContainer3D):
         for p in part:
             self[p] = self._data_source[p]
 
+    def _check_sph_type(self, finfo):
+        """
+        Check if a particle field has an SPH type.
+        There are several ways that this can happen,
+        checked in this order:
+        1. If the field type is a known particle filter, and
+           is in the list of SPH ptypes, use this type
+        2. If the field is an alias of an SPH field, but its
+           type is not "gas", use this type
+        3. Otherwise, if the field type is not in the SPH
+           types list and it is not "gas", we fail
+        If we get through without erroring out, we either have
+        a known SPH particle filter, an alias of an SPH field,
+        the default SPH ptype, or "gas" for an SPH field. Then
+        we return the particle type.
+        """
+        ftype, fname = finfo.name
+        sph_ptypes = self.ds._sph_ptypes
+        ptype = sph_ptypes[0]
+        err = KeyError(f"{ftype} is not a SPH particle type!")
+        if ftype in self.ds.known_filters:
+            if ftype not in sph_ptypes:
+                raise err
+            else:
+                ptype = ftype
+        elif finfo.is_alias:
+            if finfo.alias_name[0] not in sph_ptypes:
+                raise err
+            elif ftype != "gas":
+                ptype = ftype
+        elif ftype not in sph_ptypes and ftype != "gas":
+            raise err
+        return ptype
+
     def _fill_sph_particles(self, fields):
         from tqdm import tqdm
 
@@ -972,9 +1006,8 @@ class YTCoveringGrid(YTSelectionContainer3D):
         if smoothing_style == "scatter":
             for field in fields:
                 fi = self.ds._get_field_info(field)
-                ptype = fi.name[0]
-                if ptype not in self.ds._sph_ptypes:
-                    raise KeyError(f"{ptype} is not a SPH particle type!")
+                ptype = self._check_sph_type(fi)
+
                 buff = np.zeros(size, dtype="float64")
                 if normalize:
                     buff_den = np.zeros(size, dtype="float64")
@@ -1028,6 +1061,9 @@ class YTCoveringGrid(YTSelectionContainer3D):
         if smoothing_style == "gather":
             num_neighbors = getattr(self.ds, "num_neighbors", 32)
             for field in fields:
+                fi = self.ds._get_field_info(field)
+                ptype = self._check_sph_type(fi)
+
                 buff = np.zeros(size, dtype="float64")
 
                 fields_to_get = [
@@ -1037,9 +1073,8 @@ class YTCoveringGrid(YTSelectionContainer3D):
                     "smoothing_length",
                     field[1],
                 ]
-                all_fields = all_data(self.ds, field[0], fields_to_get, kdtree=True)
+                all_fields = all_data(self.ds, ptype, fields_to_get, kdtree=True)
 
-                fi = self.ds._get_field_info(field)
                 interpolate_sph_grid_gather(
                     buff,
                     all_fields["particle_position"],
@@ -1546,7 +1581,7 @@ class YTSmoothedCoveringGrid(YTCoveringGrid):
             # How many root cells do we occupy?
             end_index = np.rint(cell_end).astype("int64")
             dims = end_index - start_index + 1
-        return start_index, end_index.astype("int64"), dims.astype("int32")
+        return start_index, end_index, dims.astype("int32")
 
     def _update_level_state(self, level_state):
         ls = level_state
@@ -2404,6 +2439,9 @@ class YTSurface(YTSelectionContainer3D):
         color_log=True,
         sample_type="face",
         no_ghost=False,
+        *,
+        color_field_max=None,
+        color_field_min=None,
     ):
         r"""This exports the surface to the PLY format, suitable for visualization
         in many different programs (e.g., MeshLab).
@@ -2422,6 +2460,10 @@ class YTSurface(YTSelectionContainer3D):
             Which color map should be applied?
         color_log : bool
             Should the color field be logged before being mapped?
+        color_field_max : float
+            Maximum value of the color field across all surfaces.
+        color_field_min : float
+            Minimum value of the color field across all surfaces.
 
         Examples
         --------
@@ -2446,13 +2488,41 @@ class YTSurface(YTSelectionContainer3D):
             elif sample_type == "vertex" and color_field not in self.vertex_samples:
                 self.get_data(color_field, sample_type, no_ghost=no_ghost)
         self._export_ply(
-            filename, bounds, color_field, color_map, color_log, sample_type
+            filename,
+            bounds,
+            color_field,
+            color_map,
+            color_log,
+            sample_type,
+            color_field_max=color_field_max,
+            color_field_min=color_field_min,
         )
 
-    def _color_samples(self, cs, color_log, color_map, arr):
+    def _color_samples(
+        self,
+        cs,
+        color_log,
+        color_map,
+        arr,
+        *,
+        color_field_max=None,
+        color_field_min=None,
+    ):
+        cs = np.asarray(cs)
         if color_log:
             cs = np.log10(cs)
-        mi, ma = cs.min(), cs.max()
+        if color_field_min is None:
+            mi = cs.min()
+        else:
+            mi = color_field_min
+            if color_log:
+                mi = np.log10(mi)
+        if color_field_max is None:
+            ma = cs.max()
+        else:
+            ma = color_field_max
+            if color_log:
+                ma = np.log10(ma)
         cs = (cs - mi) / (ma - mi)
         from yt.visualization.image_writer import map_to_colors
 
@@ -2470,6 +2540,9 @@ class YTSurface(YTSelectionContainer3D):
         color_map=None,
         color_log=True,
         sample_type="face",
+        *,
+        color_field_max=None,
+        color_field_min=None,
     ):
         if color_map is None:
             color_map = ytcfg.get("yt", "default_colormap")
@@ -2481,7 +2554,7 @@ class YTSurface(YTSelectionContainer3D):
             DLE = self.ds.domain_left_edge
             DRE = self.ds.domain_right_edge
             bounds = [(DLE[i], DRE[i]) for i in range(3)]
-        elif any([not all([isinstance(be, YTArray) for be in b]) for b in bounds]):
+        elif any(not all(isinstance(be, YTArray) for be in b) for b in bounds):
             bounds = [
                 tuple(
                     be if isinstance(be, YTArray) else self.ds.quan(be, "code_length")
@@ -2520,7 +2593,14 @@ class YTSurface(YTSelectionContainer3D):
             f.write(b"property uchar blue\n")
             v = np.empty(self.vertices.shape[1], dtype=vs)
             cs = self.vertex_samples[color_field]
-            self._color_samples(cs, color_log, color_map, v)
+            self._color_samples(
+                cs,
+                color_log,
+                color_map,
+                v,
+                color_field_max=color_field_max,
+                color_field_min=color_field_min,
+            )
         else:
             v = np.empty(self.vertices.shape[1], dtype=vs[:3])
         line = "element face %i\n" % (nv / 3)
@@ -2533,7 +2613,14 @@ class YTSurface(YTSelectionContainer3D):
             # Now we get our samples
             cs = self[color_field]
             arr = np.empty(cs.shape[0], dtype=np.dtype(fs))
-            self._color_samples(cs, color_log, color_map, arr)
+            self._color_samples(
+                cs,
+                color_log,
+                color_map,
+                arr,
+                color_field_max=color_field_max,
+                color_field_min=color_field_min,
+            )
         else:
             arr = np.empty(nv // 3, np.dtype(fs[:-3]))
         for i, ax in enumerate("xyz"):
@@ -2566,6 +2653,9 @@ class YTSurface(YTSelectionContainer3D):
         color_log=True,
         bounds=None,
         no_ghost=False,
+        *,
+        color_field_max=None,
+        color_field_min=None,
     ):
         r"""This exports Surfaces to SketchFab.com, where they can be viewed
         interactively in a web browser.
@@ -2597,6 +2687,10 @@ class YTSurface(YTSelectionContainer3D):
         bounds : list of tuples
             [ (xmin, xmax), (ymin, ymax), (zmin, zmax) ] within which the model
             will be scaled and centered.  Defaults to the full domain.
+        color_field_max : float
+            Maximum value of the color field across all surfaces.
+        color_field_min : float
+            Minimum value of the color field across all surfaces.
 
         Returns
         -------
@@ -2640,6 +2734,8 @@ class YTSurface(YTSelectionContainer3D):
             color_log,
             sample_type="vertex",
             no_ghost=no_ghost,
+            color_field_max=color_field_max,
+            color_field_min=color_field_min,
         )
         ply_file.seek(0)
         # Greater than ten million vertices and we throw an error but dump

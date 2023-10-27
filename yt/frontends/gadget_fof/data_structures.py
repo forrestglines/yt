@@ -137,6 +137,7 @@ class GadgetFOFHDF5File(HaloCatalogFile):
 
 
 class GadgetFOFDataset(ParticleDataset):
+    _load_requirements = ["h5py"]
     _index_class = GadgetFOFParticleIndex
     _file_class = GadgetFOFHDF5File
     _field_info_class = GadgetFOFFieldInfo
@@ -232,7 +233,7 @@ class GadgetFOFDataset(ParticleDataset):
         # Set a sane default for cosmological simulations.
         if self._unit_base is None and self.cosmological_simulation == 1:
             only_on_root(mylog.info, "Assuming length units are in Mpc/h (comoving)")
-            self._unit_base = dict(length=(1.0, "Mpccm/h"))
+            self._unit_base = {"length": (1.0, "Mpccm/h")}
         # The other same defaults we will use from the standard Gadget
         # defaults.
         unit_base = self._unit_base or {}
@@ -291,7 +292,10 @@ class GadgetFOFDataset(ParticleDataset):
         return self.basename.split(".", 1)[0]
 
     @classmethod
-    def _is_valid(cls, filename, *args, **kwargs):
+    def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
+        if cls._missing_load_requirements():
+            return False
+
         need_groups = ["Group", "Header", "Subhalo"]
         veto_groups = ["FOF"]
         valid = True
@@ -430,7 +434,7 @@ class GadgetFOFHaloDataset(HaloDataset):
         super().__init__(ds, dataset_type)
 
     @classmethod
-    def _is_valid(cls, *args, **kwargs):
+    def _is_valid(cls, filename: str, *args, **kwargs) -> bool:
         # This class is not meant to be instantiated by yt.load()
         return False
 

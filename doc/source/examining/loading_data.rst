@@ -481,10 +481,7 @@ Athena++ Data
 
 Athena++ HDF5 data is supported and cared for by John ZuHone. Uniform-grid, SMR,
 and AMR datasets in cartesian coordinates are fully supported. Support for
-curvilinear coordinates and logarithmic cell sizes exists, but is preliminary.
-For the latter type of dataset, the data will be loaded in as a semi-structured
-mesh dataset. See :ref:`loading-semi-structured-mesh-data` for more details on
-how this works in yt.
+curvilinear coordinates and/or non-constant grid cell sizes exists, but is preliminary.
 
 The default unit system in yt is cgs ("Gaussian") units, but Athena++ data is
 not normally stored in these units, so the code unit system is the default unit
@@ -1680,6 +1677,40 @@ fields swapped:
 In general, to determine what fields are in your Gadget binary file, it may
 be useful to inspect them with the `g3read <https://github.com/aragagnin/g3read>`_
 code first.
+
+.. _gadget-species-fields:
+
+Gadget Species Fields
+^^^^^^^^^^^^^^^^^^^^^
+
+Gas and star particles in Gadget binary and HDF5 files can have fields
+corresponding to different species fractions or masses. The following field
+definitions are supported, in the sense that they are automatically detected
+and will be used to construct species fractions, densities, and number densities
+after the manner specified in :ref:`species-fields`. For Gadget binary files, the
+following fields (as specified in the ``field_spec`` argument) are supported:
+
+* ``"ElevenMetalMasses"``: 11 mass fields: He, C, Ca, O, N, Ne, Mg, S, Si, Fe, Ej
+* ``"FourMetalFractions"``: 4 fraction fields: C, O, Si, Fe
+
+For Gadget HDF5 files, the fields ``"MetalMasses"`` or ``"Mass Of Metals"`` are
+supported, with the number of species determined by the size of the dataset's
+second dimension in the file. Four different numbers of species in these fields
+are supported, corresponding to the following species:
+
+* 7, corresponding to C, N, O, Mg, Si, Fe, Ej
+* 8, corresponding to He, C, O, Mg, S, Si, Fe, Ej
+* 11, corresponding to He, C, Ca, O, N, Ne, Mg, S, Si, Fe, Ej
+* 15, corresponding to He, C, Ca, O, N, Ne, Mg, S, Si, Fe, Na, Al, Ar, Ni, Ej
+
+Two points should be noted about the above: the "Ej" species corresponds to the
+remaining mass of elements heavier than hydrogen and not enumerated, and in the
+case of 8, 11, and 15 species, hydrogen is assumed to be the remaining mass
+fraction.
+
+Finally, for Gadget HDF5 files, element fields which are of the form
+``"X_fraction"`` are also suppoted, and correspond to the mass fraction of element
+X.
 
 .. _gadget-long-ids:
 
@@ -3320,7 +3351,7 @@ Cf/Radial is a CF compliant netCDF convention for radial data from radar and
 lidar platforms that supports both airborne and ground-based sensors. Because
 of its CF-compliance, CfRadial will allow researchers familiar with CF to read
 the data into a wide variety of analysis tools, models etc. For more see:
-https://www.eol.ucar.edu/system/files/CfRadialDoc.v1.4.20160801.pdf
+[CfRadialDoc.v1.4.20160801.pdf](https://github.com/NCAR/CfRadial/blob/d4562a995d0589cea41f4f6a4165728077c9fc9b/docs/CfRadialDoc.v1.4.20160801.pdf)
 
 yt provides support for loading cartesian-gridded CfRadial netcdf-4 files as
 well as polar coordinate Cfradial netcdf-4 files. When loading a standard
@@ -3342,7 +3373,7 @@ When you load a CfRadial dataset in polar coordinates (elevation, azimuth and
 range), yt will first build a sample by mapping the data onto a cartesian grid
 using the Python-ARM Radar Toolkit (`pyart <https://github.com/ARM-DOE/pyart>`_).
 Grid points are found by interpolation of all data points within a specified radius of influence.
-This data, now in x, y, z coordiante domain is then saved as a new dataset and subsequent
+This data, now in x, y, z coordinate domain is then saved as a new dataset and subsequent
 loads of the original native CfRadial dataset will use the gridded file.
 Mapping the data from spherical to Cartesian coordinates is useful for 3D volume
 rendering the data using yt.
