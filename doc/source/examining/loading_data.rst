@@ -555,6 +555,89 @@ using a ``parameters`` dict, accepting the following keys:
   release.
 * Domains may be visualized assuming periodicity.
 
+.. _loading-parthenon-data:
+
+Parthenon Data
+--------------
+
+Parthenon HDF5 data is supported and cared for by Forrest Glines and Philipp Grete.
+The Parthenon framework is the basis for various downstream codes, e.g.,
+AthenaPK, Phoebus, KHARMA, RIOT, and the parthenon-hydro miniapp.
+Support for these codes is handled through the common Parthenon frontend with
+specifics described in the following.
+
+AthenaPK
+^^^^^^^^
+
+Fluid data on uniform-grid, SMR, and AMR datasets in Cartesian coordinates are fully supported.
+
+AthenaPK data may contain information on units in the output. If that information is
+present, it will be used by yt. Otherwise the default unit system will be the code unit
+system with conversion of 1 ``code_length`` equalling 1 cm, and so on (given yt's default
+cgs/"Gaussian" unit system).  If you would like to provided different
+conversions, you may supply conversions for length, time, and mass to ``load``
+using the ``units_override`` functionality:
+
+.. code-block:: python
+
+   import yt
+
+   units_override = {
+       "length_unit": (1.0, "Mpc"),
+       "time_unit": (1.0, "Myr"),
+       "mass_unit": (1.0e14, "Msun"),
+   }
+
+   ds = yt.load("AM06/AM06.out1.00400.athdf", units_override=units_override)
+
+This means that the yt fields, e.g. ``("gas","density")``,
+``("gas","velocity_x")``, ``("gas","magnetic_field_x")``, will be in cgs units
+(or whatever unit system was specified), but the Athena fields, e.g.,
+``("athena_pp","density")``, ``("athena_pp","vel1")``, ``("athena_pp","Bcc1")``,
+will be in code units.
+
+The default normalization for various magnetic-related quantities such as
+magnetic pressure, Alfven speed, etc., as well as the conversion between
+magnetic code units and other units, is Gaussian/CGS, meaning that factors
+of :math:`4\pi` or :math:`\sqrt{4\pi}` will appear in these quantities, e.g.
+:math:`p_B = B^2/8\pi`. To use the Lorentz-Heaviside normalization instead,
+in which the factors of :math:`4\pi` are dropped (:math:`p_B = B^2/2), for
+example), set ``magnetic_normalization="lorentz_heaviside"`` in the call to
+``yt.load``:
+
+.. code-block:: python
+
+    ds = yt.load(
+        "AM06/AM06.out1.00400.athdf",
+        units_override=units_override,
+        magnetic_normalization="lorentz_heaviside",
+    )
+
+Alternative values for the following simulation parameters may be specified
+using a ``parameters`` dict, accepting the following keys:
+
+* ``gamma``: ratio of specific heats, Type: Float. If not specified,
+  :math:`\gamma = 5/3` is assumed.
+* ``geometry``: Geometry type, currently accepts ``"cartesian"`` or
+  ``"cylindrical"``. Default is ``"cartesian"``.
+* ``periodicity``: Is the domain periodic? Type: Tuple of boolean values
+  corresponding to each dimension. Defaults to ``True`` in all directions.
+* ``mu``: mean molecular weight, Type: Float. If not specified, :math:`\mu = 0.6`
+  (for a fully ionized primordial plasma) is assumed.
+
+.. rubric:: Caveats
+
+* yt primarily works with primitive variables. If the Athena++ dataset contains
+  conservative variables, the yt primitive fields will be generated from the
+  conserved variables on disk.
+* Special relativistic datasets may be loaded, but at this time not all of their
+  fields are fully supported. In particular, the relationships between
+  quantities such as pressure and thermal energy will be incorrect, as it is
+  currently assumed that their relationship is that of an ideal
+  :math:`\gamma`-law equation of state. This will be rectified in a future
+  release.
+* Domains may be visualized assuming periodicity.
+
 .. _loading-orion-data:
 
 AMReX / BoxLib Data
