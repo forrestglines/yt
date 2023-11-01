@@ -261,6 +261,7 @@ class ParthenonDataset(Dataset):
         self.num_ghost_zones = 0
         self.field_ordering = "fortran"
         self.boundary_conditions = [1] * 6
+        self.cosmological_simulation = False
 
         if "periodicity" in self.parameters:
             self._periodicity = tuple(self.parameters["periodicity"])
@@ -286,7 +287,9 @@ class ParthenonDataset(Dataset):
             )
             self.gamma = 5.0 / 3.0
 
-        if "Hydro/mu" in self.parameters:
+        if "mu" in self.parameters:
+            self.mu = self.parameters["mu"]
+        elif "Hydro/mu" in self.parameters:
             self.mu = self.parameters["Hydro/mu"]
         # Legacy He_mass_fraction parameter implemented in AthenaPK
         elif "Hydro/He_mass_fraction" in self.parameters:

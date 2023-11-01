@@ -559,17 +559,34 @@ Parthenon Data
 
 Parthenon HDF5 data is supported and cared for by Forrest Glines and Philipp Grete.
 The Parthenon framework is the basis for various downstream codes, e.g.,
-AthenaPK, Phoebus, KHARMA, RIOT, and the parthenon-hydro miniapp.
+`AthenaPK <https://github.com/parthenon-hpc-lab/athenapk>`_,
+`Phoebus <https://github.com/lanl/phoebus>`_,
+`KHARMA <https://github.com/AFD-Illinois/kharma>`_,
+RIOT, and the
+`parthenon-hydro <https://github.com/parthenon-hpc-lab/parthenon-hydro>`_ miniapp.
 Support for these codes is handled through the common Parthenon frontend with
 specifics described in the following.
+Note that only AthenaPK data is currently automatically converted to the
+standard fields known by yt.
+For other codes, the raw data of the fields stored in the output file is accessible
+and a conversion between those fields and yt standard fields need to be done manually.
+
+   .. rubric:: Caveats
+
+* Reading particle data from Parthenon output is currently not supported.
+* Only Cartesian coordinate systems are currently supported.
+* Other than periodic boundary conditions are currently not supported by the
+  yt Parthenon frontend.
 
 AthenaPK
 ^^^^^^^^
 
 Fluid data on uniform-grid, SMR, and AMR datasets in Cartesian coordinates are fully supported.
 
-AthenaPK data may contain information on units in the output. If that information is
-present, it will be used by yt. Otherwise the default unit system will be the code unit
+AthenaPK data may contain information on units in the output (when specified
+via the ``<units>`` block in the input file when the simulation was originally run).
+If that information is present, it will be used by yt.
+Otherwise the default unit system will be the code unit
 system with conversion of 1 ``code_length`` equalling 1 cm, and so on (given yt's default
 cgs/"Gaussian" unit system).  If you would like to provided different
 conversions, you may supply conversions for length, time, and mass to ``load``
@@ -585,13 +602,13 @@ using the ``units_override`` functionality:
        "mass_unit": (1.0e14, "Msun"),
    }
 
-   ds = yt.load("AM06/AM06.out1.00400.athdf", units_override=units_override)
+   ds = yt.load("parthenon.restart.final.rhdf", units_override=units_override)
 
 This means that the yt fields, e.g. ``("gas","density")``,
 ``("gas","velocity_x")``, ``("gas","magnetic_field_x")``, will be in cgs units
-(or whatever unit system was specified), but the Athena fields, e.g.,
-``("athena_pp","density")``, ``("athena_pp","vel1")``, ``("athena_pp","Bcc1")``,
-will be in code units.
+(or whatever unit system was specified), but the AthenaPK fields, e.g.,
+``("parthenon","prim_density")``, ``("parthenon","prim_velocity_1")``,
+``("parthenon","prim_magnetic_field_1")``, will be in code units.
 
 The default normalization for various magnetic-related quantities such as
 magnetic pressure, Alfven speed, etc., as well as the conversion between
@@ -605,35 +622,52 @@ example), set ``magnetic_normalization="lorentz_heaviside"`` in the call to
 .. code-block:: python
 
     ds = yt.load(
-        "AM06/AM06.out1.00400.athdf",
+        "parthenon.restart.final.rhdf",
         units_override=units_override,
         magnetic_normalization="lorentz_heaviside",
     )
 
-Alternative values for the following simulation parameters may be specified
+Alternative values (i.e., overriding the default ones stored in the simulation
+output) for the following simulation parameters may be specified
 using a ``parameters`` dict, accepting the following keys:
 
 * ``gamma``: ratio of specific heats, Type: Float. If not specified,
   :math:`\gamma = 5/3` is assumed.
-* ``geometry``: Geometry type, currently accepts ``"cartesian"`` or
-  ``"cylindrical"``. Default is ``"cartesian"``.
-* ``periodicity``: Is the domain periodic? Type: Tuple of boolean values
-  corresponding to each dimension. Defaults to ``True`` in all directions.
 * ``mu``: mean molecular weight, Type: Float. If not specified, :math:`\mu = 0.6`
   (for a fully ionized primordial plasma) is assumed.
 
-.. rubric:: Caveats
+Other Parthenon based codes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* yt primarily works with primitive variables. If the Athena++ dataset contains
-  conservative variables, the yt primitive fields will be generated from the
-  conserved variables on disk.
-* Special relativistic datasets may be loaded, but at this time not all of their
-  fields are fully supported. In particular, the relationships between
-  quantities such as pressure and thermal energy will be incorrect, as it is
-  currently assumed that their relationship is that of an ideal
-  :math:`\gamma`-law equation of state. This will be rectified in a future
-  release.
-* Domains may be visualized assuming periodicity.
+As mentioned above, a default conversion from code fields to yt fields (e.g.,
+from a density field to ``("gas","density")``) is currently not available --
+though more specialized frontends may be added in the future.
+
+All raw data of a Parthenon-based simulation output is available through
+the ``("parthenon","NAME")`` fields where ``NAME`` varies between codes
+and the respective code documentation should be consulted.
+
+One option to manually convert those raw fields to the standard yt fields
+is by adding derived fields, e.g., for the field named "``mass.density``"
+that is stored in cgs units on disk:
+
+.. code-block:: python
+
+    from yt import derived_field
+
+
+    @derived_field(name="density", units="g*cm**-3", sampling_type="cell")
+    def __density(field, data):
+        return data[("parthenon", "mass.density")] * yt.units.g / yt.units.cm**3
+
+Moreover, an ideal equation of state is assumed with the following parameters,
+which may be specified using a ``parameters`` dict, accepting the following keys:
+
+* ``gamma``: ratio of specific heats, Type: Float. If not specified,
+  :math:`\gamma = 5/3` is assumed.
+* ``mu``: mean molecular weight, Type: Float. If not specified, :math:`\mu = 0.6`
+  (for a fully ionized primordial plasma) is assumed.
+
 
 .. _loading-orion-data:
 
