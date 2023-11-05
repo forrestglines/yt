@@ -17,7 +17,9 @@ from yt.utilities.file_handler import HDF5FileHandler
 from .fields import ParthenonFieldInfo
 
 geom_map = {
-    "UniformCartesian": Geometry.CARTESIAN,
+    "UniformCartesian": (Geometry.CARTESIAN,("x","y","z")),
+    "UniformCylindrical": (Geometry.CYLINDRICAL,("r","theta","z")),
+    "UniformSpherical": (Geometry.SPHERICAL,("r","theta","phi")),
 }
 
 _cis = np.fromiter(
@@ -158,6 +160,10 @@ class ParthenonDataset(Dataset):
             self._index_class = ParthenonHierarchy
             self.logarithmic = False
         self._magnetic_factor = get_magnetic_normalization(magnetic_normalization)
+
+        self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"]][0]
+        axis_order = geom_map[self._handle["Info"].attrs["Coordinates"]][1]
+
         Dataset.__init__(
             self,
             filename,
@@ -165,6 +171,7 @@ class ParthenonDataset(Dataset):
             units_override=units_override,
             unit_system=unit_system,
             default_species_fields=default_species_fields,
+            axis_order=axis_order
         )
         if storage_filename is None:
             storage_filename = self.basename + ".yt"
@@ -215,7 +222,6 @@ class ParthenonDataset(Dataset):
         self.domain_left_edge = np.array([xmin, ymin, zmin], dtype="float64")
         self.domain_right_edge = np.array([xmax, ymax, zmax], dtype="float64")
 
-        self.geometry = geom_map[self._handle["Info"].attrs["Coordinates"]]
         self.domain_width = self.domain_right_edge - self.domain_left_edge
         self.domain_dimensions = self._handle["Info"].attrs["RootGridSize"]
 
