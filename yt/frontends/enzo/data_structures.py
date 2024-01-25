@@ -441,7 +441,8 @@ class EnzoHierarchy(GridIndex):
 
     def _generate_random_grids(self):
         if self.num_grids > 40:
-            starter = np.random.randint(0, 20)
+            rng = np.random.default_rng()
+            starter = rng.integers(0, 20)
             random_sample = np.mgrid[starter : len(self.grids) - 1 : 20j].astype(
                 "int32"
             )
@@ -608,7 +609,8 @@ class EnzoHierarchyInMemory(EnzoHierarchy):
         my_rank = self.comm.rank
         my_grids = self.grids[self.grid_procs.ravel() == my_rank]
         if len(my_grids) > 40:
-            starter = np.random.randint(0, 20)
+            rng = np.random.default_rng()
+            starter = rng.integers(0, 20)
             random_sample = np.mgrid[starter : len(my_grids) - 1 : 20j].astype("int32")
             mylog.debug("Checking grids: %s", random_sample.tolist())
         else:
@@ -664,7 +666,7 @@ class EnzoDataset(Dataset):
     Enzo-specific output, set at a fixed time.
     """
 
-    _load_requirements = ["h5py", "libconf"]
+    _load_requirements = ["h5py"]
     _index_class = EnzoHierarchy
     _field_info_class = EnzoFieldInfo
 

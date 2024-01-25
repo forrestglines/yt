@@ -501,7 +501,7 @@ def small_fake_hexahedral_ds():
 def fake_stretched_ds(N=16):
     from yt.loaders import load_uniform_grid
 
-    np.random.seed(0x4D3D3D3)
+    np.random.RandomState().seed(0x4D3D3D3)
     data = {"density": np.random.random((N, N, N))}
 
     cell_widths = []
@@ -1441,7 +1441,9 @@ class ParticleSelectionComparison:
             # NULP should be OK.  This is mostly for stuff like Rockstar, where
             # the f32->f64 casting happens at different places depending on
             # which code path we use.
-            assert_array_almost_equal_nulp(sel_pos, obj_results, 5)
+            assert_array_almost_equal_nulp(
+                np.asarray(sel_pos), np.asarray(obj_results), 5
+            )
 
     def run_defaults(self):
         """

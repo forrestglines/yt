@@ -99,9 +99,9 @@ class ParticleTrajectories:
         ):
             dd = ds.all_data()
             newtags = dd[fds["particle_index"]].d.astype("int64")
-            mask = np.in1d(newtags, indices, assume_unique=True)
+            mask = np.isin(newtags, indices, assume_unique=True)
             sort = np.argsort(newtags[mask])
-            array_indices = np.where(np.in1d(indices, newtags, assume_unique=True))[0]
+            array_indices = np.where(np.isin(indices, newtags, assume_unique=True))[0]
             self.array_indices.append(array_indices)
             self.masks.append(mask)
             self.sorts.append(sort)
@@ -138,7 +138,7 @@ class ParticleTrajectories:
                     raise YTIllDefinedParticleData(
                         "This dataset contains duplicate particle indices!"
                     ) from e
-            self.field_data[field] = array_like_field(
+            self.field_data[fds[field]] = array_like_field(
                 dd_first, output_field.copy(), fds[field]
             )
             self.particle_fields.append(field)
@@ -333,14 +333,14 @@ class ParticleTrajectories:
         ... )
         >>> plt.savefig("orbit")
         """
-        mask = np.in1d(self.indices, (index,), assume_unique=True)
+        mask = np.isin(self.indices, (index,), assume_unique=True)
         if not np.any(mask):
             print("The particle index %d is not in the list!" % (index))
             raise IndexError
         fields = sorted(self.field_data.keys())
         traj = {}
-        traj["particle_time"] = self.times
-        traj["particle_index"] = index
+        traj[(self.ptype, "particle_time")] = self.times
+        traj[(self.ptype, "particle_index")] = index
         for field in fields:
             traj[field] = self[field][mask, :][0]
         return traj
