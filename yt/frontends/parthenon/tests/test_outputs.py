@@ -16,7 +16,7 @@ from yt.utilities.answer_testing.framework import (
 )
 
 _fields_advection2d = (
-    ("parthenon", "Advected_0_0"),
+    ("parthenon", "advected_0_0"),
     ("parthenon", "one_minus_advected"),
     ("parthenon", "one_minus_advected_sq"),
     ("parthenon", "one_minus_sqrt_one_minus_advected_sq_12"),
@@ -56,7 +56,7 @@ def test_disk():
 
     # check if the peak is in the domain center (and at the highest refinement level)
     dist_of_max_from_center = np.linalg.norm(
-        ad.quantities.max_location(("parthenon", "Advected_0_0"))[1:] - ds.domain_center
+        ad.quantities.max_location(("parthenon", "advected_0_0"))[1:] - ds.domain_center
     )
 
     dx_min, dx_max = ad.quantities.extrema(("index", "dx"))
