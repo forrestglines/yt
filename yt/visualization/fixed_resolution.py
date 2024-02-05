@@ -84,6 +84,7 @@ class FixedResolutionBuffer:
     >>> print(frb1[("gas", "temperature")].max())
     104923.1 K
     """
+
     _exclude_fields = (
         "pz",
         "pdz",
