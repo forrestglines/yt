@@ -62,21 +62,27 @@ def test_loading_data():
 
     assert_true(dist_of_max_from_center < np.min((dx_min, dy_min)))
 
+# Keplerian disk in 2D cylindrical from downstream Parthenon code AthenaPK
 athenapk_disk = "athenapk.prim.disk.phdf"
 
 @requires_ds(athenapk_disk)
 def test_AthenaPKDataset():
+    # Test that a downstream AthenaPK data set can be loaded with this Parthenon
+    # frontend
     assert isinstance(data_dir_load(athenapk_disk), ParthenonDataset)
 
 @requires_ds(athenapk_disk)
 def test_load_cylindrical():
+    # Load a cylindrical dataset of a full disk
     ds = data_dir_load(athenapk_disk)
 
+    #Check that the domain edges match r in [0.5,2.0], theta in [0, 2pi]
     assert_equal(ds.domain_left_edge.in_units("code_length").v[:2],(0.5,0))
     assert_equal(ds.domain_right_edge.in_units("code_length").v[:2],(2.0,2*np.pi))
 
 @requires_ds(athenapk_disk)
 def test_units():
+    # Check units in dataset are loaded correctly
     ds = data_dir_load(athenapk_disk)
     assert_allclose(float(ds.quan(1,"code_time"  ).in_units("Gyr" )),1   ,rtol=1e-8)
     assert_allclose(float(ds.quan(1,"code_length").in_units("Mpc" )),1   ,rtol=1e-8)
@@ -88,6 +94,8 @@ _fields_derived = (
 
 @requires_ds(athenapk_disk)
 def test_derived_fields():
+    # Check that derived fields like temperature are present from downstream
+    # codes that define primitive fluid values
     ds = data_dir_load(athenapk_disk)
     dd = ds.all_data()
 
