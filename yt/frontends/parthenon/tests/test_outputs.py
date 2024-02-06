@@ -12,7 +12,6 @@ from yt.utilities.answer_testing.framework import (
     GenericArrayTest,
     data_dir_load,
     requires_ds,
-    small_patch_amr,
 )
 
 _fields_advection2d = (
@@ -29,9 +28,8 @@ _fields_advection2d = (
 # on changeset e5059ad
 advection2d = "advection_2d.out0.final.phdf"
 
-
 @requires_ds(advection2d)
-def test_disk():
+def test_loading_data():
     ds = data_dir_load(advection2d)
     assert_equal(str(ds), "advection_2d.out0.final")
     dd = ds.all_data()
@@ -64,41 +62,40 @@ def test_disk():
 
     assert_true(dist_of_max_from_center < np.min((dx_min, dy_min)))
 
+athenapk_disk = "athenapk.prim.disk.phdf"
 
-_fields_AM06 = ("temperature", "density", "velocity_magnitude", "magnetic_field_x")
+@requires_ds(athenapk_disk)
+def test_AthenaPKDataset():
+    assert isinstance(data_dir_load(athenapk_disk), ParthenonDataset)
 
-AM06 = "AM06/AM06.out1.00400.athdf"
+@requires_ds(athenapk_disk)
+def test_load_cylindrical():
+    ds = data_dir_load(athenapk_disk)
 
+    assert_equal(ds.domain_left_edge.in_units("code_length").v[:2],(0.5,0))
+    assert_equal(ds.domain_right_edge.in_units("code_length").v[:2],(2.0,2*np.pi))
 
-@requires_ds(AM06)
-def test_AM06():
-    ds = data_dir_load(AM06)
-    assert_equal(str(ds), "AM06.out1.00400")
-    for test in small_patch_amr(ds, _fields_AM06):
-        test_AM06.__name__ = test.description
-        yield test
+@requires_ds(athenapk_disk)
+def test_units():
+    ds = data_dir_load(athenapk_disk)
+    assert_allclose(float(ds.quan(1,"code_time"  ).in_units("Gyr" )),1   ,rtol=1e-8)
+    assert_allclose(float(ds.quan(1,"code_length").in_units("Mpc" )),1   ,rtol=1e-8)
+    assert_allclose(float(ds.quan(1,"code_mass"  ).in_units("msun")),1e14,rtol=1e-8)
 
+_fields_derived = (
+    ("gas", "temperature"),
+)
 
-uo_AM06 = {
-    "length_unit": (1.0, "kpc"),
-    "mass_unit": (1.0, "Msun"),
-    "time_unit": (1.0, "Myr"),
-}
+@requires_ds(athenapk_disk)
+def test_derived_fields():
+    ds = data_dir_load(athenapk_disk)
+    dd = ds.all_data()
 
+    # test data
+    for field in _fields_derived:
 
-@requires_file(AM06)
-def test_AM06_override():
-    # verify that overriding units causes derived unit values to be updated.
-    # see issue #1259
-    ds = load(AM06, units_override=uo_AM06)
-    assert_equal(float(ds.magnetic_unit.in_units("gauss")), 9.01735778342523e-08)
+        def field_func(name):
+            return dd[name]
 
+        yield GenericArrayTest(ds, field_func, args=[field])
 
-@requires_file(AM06)
-def test_units_override():
-    units_override_check(AM06)
-
-
-@requires_file(AM06)
-def test_AthenaPPDataset():
-    assert isinstance(data_dir_load(AM06), ParthenonDataset)
