@@ -94,8 +94,6 @@ _fields_derived = (
 
 _fields_derived_cluster = (
     ("gas", "magnetic_field_strength"),
-    #("gas", "cooling_rate"),
-    #("gas", "cooling_time"),
 )
 
 @requires_ds(athenapk_cluster)
