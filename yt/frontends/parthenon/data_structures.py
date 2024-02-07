@@ -145,6 +145,7 @@ class ParthenonDataset(Dataset):
         self.fluid_types += ("parthenon",)
         if parameters is None:
             parameters = {}
+        self.specified_parameters = parameters
         if units_override is None:
             units_override = {}
         self._handle = HDF5FileHandler(filename)
@@ -212,6 +213,7 @@ class ParthenonDataset(Dataset):
         self.velocity_unit = self.length_unit / self.time_unit
 
     def _parse_parameter_file(self):
+        self.parameters.update(self.specified_parameters)
         for key, val in self._handle["Params"].attrs.items():
             if key in self.parameters.keys():
                 mylog.warning(
